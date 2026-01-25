@@ -1,0 +1,83 @@
+[build-system]
+requires = ["setuptools>=61.0", "setuptools-rust"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pandas-column-linter"
+version = "0.1.0"
+description = "A high-performance linter for pandas DataFrame column schemas"
+readme = "README.md"
+authors = [
+    { name = "Will", email = "will@example.com" }
+]
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = [
+    "mypy",
+]
+
+[tool.setuptools]
+py-modules = ["pandas_linter_mypy"]
+packages = ["pandas_column_linter"]
+
+[[tool.setuptools-rust.ext-modules]]
+target = "pandas_column_linter.bin.rust_pandas_linter"
+path = "rust_pandas_linter/Cargo.toml"
+binding = "none"
+
+[tool.setuptools.package-data]
+pandas_column_linter = ["bin/*"]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest",
+    "pytest-cov",
+    "ruff",
+]
+
+[tool.pandas_column_linter]
+enabled = true
+
+[tool.mypy]
+strict = true
+plugins = [
+  "pandera.mypy",
+  "./pandas_linter_mypy.py"
+]
+
+[tool.pytest.ini_options]
+addopts = "--cov=. --cov-report=term-missing --cov-branch"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+omit = [
+    "examples/*",
+    "tests/*",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+fix = true
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "D203", # One of D203 or D211 must be ignored
+    "D212", # One of D212 or D213 must be ignored
+    "S603", # subprocess call: check for execution of untrusted input
+    "S607", # Starting a process with a partial executable path
+    "ANN401", # Any is disallowed in *args/**kwargs
+    "C901", # Too complex
+    "COM812", # Formatter conflict
+    "PTH123", # open() should be replaced by Path.open()
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "D", "ANN", "SLF001", "PLC0415", "S108"]
+"examples/*" = ["T201", "D", "ANN", "S101", "PLC0415"]
+"pandas_linter_mypy.py" = ["PLC0415"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
