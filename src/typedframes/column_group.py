@@ -66,7 +66,7 @@ class ColumnGroup:
                 if member.name in consumed_map:
                     result.extend(consumed_map[member.name])
                 elif isinstance(member.members, list):
-                    result.extend(member.members)
+                    result.extend(member.members)  # ty: ignore[invalid-argument-type]
             elif isinstance(member, ColumnGroup):
                 result.extend(member.get_column_names(consumed_map))
 

@@ -546,8 +546,8 @@ result = efficient_aggregation(df)
 | Backend type safety | ✅ Yes | ❌ No |
 | Performance overhead | ✅ Zero | ⚠️ Validation cost |
 
-**Use typedframes for:** Static analysis, clean schemas, development-time checking  
-**Use Pandera for:** Runtime validation, production data quality checks  
+**Use typedframes for:** Static analysis, clean schemas, development-time checking
+**Use Pandera for:** Runtime validation, production data quality checks
 **Use both together:** typedframes schemas + Pandera validation via integration
 
 ### vs pandas-stubs
@@ -613,7 +613,7 @@ Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md)
 
 **Future possibilities:**
 - Dask support
-- Modin support  
+- Modin support
 - Ray datasets support
 - Pyright plugin
 
@@ -630,7 +630,7 @@ MIT License - see [LICENSE](LICENSE)
 **Shipped:**
 - [x] Schema definition API
 - [x] Pandas support
-- [x] Polars support  
+- [x] Polars support
 - [x] Mypy plugin
 - [x] Standalone checker (Rust)
 - [x] Explicit backend types
@@ -650,22 +650,22 @@ MIT License - see [LICENSE](LICENSE)
 
 ## FAQ
 
-**Q: Do I need to choose between pandas and polars?**  
+**Q: Do I need to choose between pandas and polars?**
 A: No. Define your schema once, use it with both. Just use the appropriate type (`PandasFrame` or `PolarsFrame`) in your function signatures.
 
-**Q: Can I write backend-agnostic functions?**  
+**Q: Can I write backend-agnostic functions?**
 A: Yes, using `Union[PandasFrame[T], PolarsFrame[T]]` or by using only the schema attribute API (`df.column_name`).
 
-**Q: Does this replace Pandera?**  
+**Q: Does this replace Pandera?**
 A: No, it complements it. Use typedframes for static analysis, Pandera for runtime validation. We provide integration helpers.
 
-**Q: Is the standalone checker required?**  
+**Q: Is the standalone checker required?**
 A: No. You can use just the mypy plugin, just the standalone checker, or both. They catch the same errors.
 
-**Q: What about pyright/pylance users?**  
+**Q: What about pyright/pylance users?**
 A: The mypy plugin doesn't work with pyright yet. Use the standalone checker (`typedframes check`) for now. Pyright plugin is on the roadmap.
 
-**Q: Does this work with existing pandas/polars code?**  
+**Q: Does this work with existing pandas/polars code?**
 A: Yes. You can gradually adopt typedframes by adding schemas to new code. Existing code continues to work.
 
 ---

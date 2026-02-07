@@ -62,7 +62,7 @@ class TypedFramesPlugin(Plugin):
 
         try:
             # Try to import the Rust extension module
-            from typedframes._rust_linter import check_file
+            from typedframes._rust_linter import check_file  # ty: ignore[unresolved-import]
         except ImportError:
             pass
         else:

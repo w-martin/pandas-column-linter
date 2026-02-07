@@ -108,7 +108,7 @@ jobs:
           if [ "${{ matrix.os }}" == "windows-latest" ]; then
             cp rust_pandas_linter/target/${{ matrix.target }}/release/rust_pandas_linter.exe typedframes/bin/
           fi
-          
+
           # Use a platform-specific wheel tag if needed
           # For macOS and Windows, python -m build usually does the right thing if we are on the host.
           # For Linux cross-compilation, we need to be careful.

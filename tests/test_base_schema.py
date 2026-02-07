@@ -203,7 +203,3 @@ class TestBaseSchema(unittest.TestCase):
 
         # assert
         self.assertIn("Missing required column: email", errors)
-
-
-if __name__ == "__main__":
-    unittest.main()

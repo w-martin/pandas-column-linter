@@ -116,7 +116,3 @@ class TestColumn(unittest.TestCase):
 
         # assert
         self.assertIs(sut.alias, DefinedLater)
-
-
-if __name__ == "__main__":
-    unittest.main()

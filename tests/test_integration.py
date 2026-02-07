@@ -73,7 +73,7 @@ class TestTypedFramesLinterIntegration(unittest.TestCase):
     def test_should_run_via_python_extension(self) -> None:
         """Test that the Rust linter works via Python extension."""
         # arrange
-        from typedframes._rust_linter import check_file
+        from typedframes._rust_linter import check_file  # ty: ignore[unresolved-import]
 
         example_file = str(Path("examples/typedframes_example.py").absolute())
 
@@ -83,7 +83,3 @@ class TestTypedFramesLinterIntegration(unittest.TestCase):
         # assert
         self.assertIn("wrong_column", result)
         self.assertIn("does not exist", result)
-
-
-if __name__ == "__main__":
-    unittest.main()

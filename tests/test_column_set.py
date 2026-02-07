@@ -80,7 +80,3 @@ class TestColumnSet(unittest.TestCase):
 
         # assert
         self.assertIs(sut.members, DefinedLater)
-
-
-if __name__ == "__main__":
-    unittest.main()

@@ -127,6 +127,75 @@ class TestPandasFrame(unittest.TestCase):
         self.assertEqual(shape, (2, 2))
         self.assertEqual(columns, ["user_id", "email_address"])
 
+    def test_should_preserve_type_after_merge(self) -> None:
+        """Test that merge preserves PandasFrame type and schema."""
+        # arrange
+        df1 = pd.DataFrame({"user_id": [1, 2], "email_address": ["a@b.com", "c@d.com"]})
+        df2 = pd.DataFrame({"user_id": [1, 2], "name": ["Alice", "Bob"]})
+        sut = PandasFrame.from_schema(df1, UserSchema)
 
-if __name__ == "__main__":
-    unittest.main()
+        # act
+        result = sut.merge(df2, on="user_id")
+
+        # assert
+        self.assertIsInstance(result, PandasFrame)
+        self.assertEqual(result.schema, UserSchema)
+        self.assertEqual(len(result), 2)
+
+    def test_should_preserve_type_after_join(self) -> None:
+        """Test that df.join() preserves PandasFrame type and schema."""
+        # arrange
+        df1 = pd.DataFrame({"user_id": [1, 2], "email_address": ["a@b.com", "c@d.com"]})
+        df2 = pd.DataFrame({"name": ["Alice", "Bob"]}, index=[0, 1])
+        sut = PandasFrame.from_schema(df1, UserSchema)
+
+        # act
+        result = sut.join(df2)
+
+        # assert
+        self.assertIsInstance(result, PandasFrame)
+        self.assertEqual(result.schema, UserSchema)
+
+    def test_should_access_columns_after_merge(self) -> None:
+        """Test that schema column access works after merge."""
+        # arrange
+        df1 = pd.DataFrame({"user_id": [1, 2], "email_address": ["a@b.com", "c@d.com"]})
+        df2 = pd.DataFrame({"user_id": [1, 2], "name": ["Alice", "Bob"]})
+        sut = PandasFrame.from_schema(df1, UserSchema)
+        merged = sut.merge(df2, on="user_id")
+
+        # act
+        user_ids = merged.user_id
+        emails = merged.email
+
+        # assert
+        self.assertEqual(user_ids.tolist(), [1, 2])
+        self.assertEqual(emails.tolist(), ["a@b.com", "c@d.com"])
+
+    def test_should_access_columns_after_filter(self) -> None:
+        """Test that schema column access works after filtering."""
+        # arrange
+        raw_df = pd.DataFrame({"user_id": [1, 2, 3], "email_address": ["a@b.com", "c@d.com", "e@f.com"]})
+        sut = PandasFrame.from_schema(raw_df, UserSchema)
+        filtered = sut[sut.user_id > 1]
+
+        # act
+        user_ids = filtered.user_id
+        emails = filtered.email
+
+        # assert
+        self.assertEqual(user_ids.tolist(), [2, 3])
+        self.assertEqual(emails.tolist(), ["c@d.com", "e@f.com"])
+
+    def test_should_access_columns_after_select(self) -> None:
+        """Test that schema column access works after column selection."""
+        # arrange
+        raw_df = pd.DataFrame({"user_id": [1, 2], "email_address": ["a@b.com", "c@d.com"]})
+        sut = PandasFrame.from_schema(raw_df, UserSchema)
+        selected = sut[["user_id", "email_address"]]
+
+        # act
+        user_ids = selected.user_id
+
+        # assert
+        self.assertEqual(user_ids.tolist(), [1, 2])

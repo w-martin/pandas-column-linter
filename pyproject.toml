@@ -36,9 +36,11 @@ branch = true
 omit = [
     "examples/*",
     "tests/*",
+    "tasks.py",
 ]
 
 [tool.mypy]
+mypy_path = "src"
 plugins = ["typedframes.mypy"]
 ignore_missing_imports = true
 
@@ -67,6 +69,7 @@ ignore = [
     "PTH123", # open() should be replaced by Path.open()
     "PT009",
     "PT027",
+    "PLC0414", # Import alias does not rename original package (intentional for re-exports)
     "PLC0415",
     "PLR0911", # Too many return statements
     "PLR0912", # Too many branches
@@ -83,11 +86,32 @@ ignore = [
 [tool.ruff.lint.mccabe]
 max-complexity = 10
 
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
 [dependency-groups]
 dev = [
+    "bandit>=1.7.0",
+    "complexipy>=0.7.0",
+    "invoke>=2.2.0",
+    "licensecheck>=2024.0.0",
+    "maturin>=1.11.5",
+    "pre-commit>=3.7.0",
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",
     "ruff>=0.14.13",
+]
+
+[tool.bandit]
+exclude_dirs = ["tests", "examples"]
+skips = ["B101", "B110", "B404", "B603"]  # B101=assert, B110=try-except-pass, B404=subprocess import, B603=subprocess call
+
+[tool.coverage.report]
+fail_under = 50
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
 ]
 
 [tool.ty.terminal]

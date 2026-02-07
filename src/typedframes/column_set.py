@@ -36,8 +36,8 @@ class ColumnSet:
 
     """
 
-    members: list[str] | str | DefinedLater
-    type: type = Any
+    members: list[str] | str | type[DefinedLater]  # ty: ignore[invalid-type-form]
+    type: type = Any  # ty: ignore[invalid-type-form]
     regex: bool = False
     description: str = ""
     name: str = field(default="", init=False)
@@ -71,8 +71,8 @@ class ColumnSet:
         if matched_columns is not None:
             return [pl.col(c) for c in matched_columns]
 
-        if isinstance(self.members, DefinedLater) or self.regex:
+        if self.members is DefinedLater or self.regex:
             msg = "Cannot get column expressions for regex or DefinedLater members without matched_columns"
             raise ValueError(msg)
 
-        return [pl.col(c) for c in self.members]
+        return [pl.col(c) for c in self.members]  # ty: ignore[not-iterable]
