@@ -1,0 +1,33 @@
+All 29 tests pass. Here's a summary of the changes made:
+
+  Core fix: DefinedLater sentinel pattern (defined_later.py)
+  - Converted from a class used as a sentinel (DefinedLater the class) to a
+  singleton instance pattern (_DefinedLaterType class + DefinedLater instance).
+  This fixes the type mismatch where type[DefinedLater] was passed where
+  DefinedLater (instance) was expected.
+
+  Type annotation updates:
+  - column.py: alias: str | _DefinedLaterType | None (was str | DefinedLater |
+  None)
+  - column_set.py: members: list[str] | str | _DefinedLaterType (was list[str] |
+   str | DefinedLater)
+
+  Runtime check fixes (replaced isinstance(x, DefinedLater) with x is
+  DefinedLater):
+  - base_schema.py:122, 134
+  - pandas_frame.py:114, 122
+  - column_set.py:74
+
+  Other fixes:
+  - polars_frame.py: Changed __class_getitem__ return type from -> type to ->
+  Any (since Annotated[...] is not a type)
+  - pandas_frame.py: Added # ty: ignore for __getattr__ override of final
+  NDFrame.__getattr__, and for # type: ignore comments needed by mypy
+  - examples/pandera_example.py, mypy.py, test_integration.py: Added # ty:
+  ignore[unresolved-import] for optional/build-time dependencies
+
+  Suppressed ty narrowing limitations (5 cases where isinstance(x, list) doesn't
+   fully narrow _DefinedLaterType out of the union):
+  - base_schema.py:88, 151, 186
+  - column_group.py:69
+  - column_set.py:78
