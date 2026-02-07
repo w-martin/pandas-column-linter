@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import polars as pl
 
-    from .defined_later import DefinedLater
+from .defined_later import DefinedLater  # noqa: TC001
 
 
 @dataclass
@@ -31,8 +31,8 @@ class Column:
 
     """
 
-    type: type = Any
-    alias: str | DefinedLater | None = None
+    type: type = Any  # ty: ignore[invalid-type-form]
+    alias: str | type[DefinedLater] | None = None  # ty: ignore[invalid-type-form]
     nullable: bool = False
     description: str = ""
     name: str = field(default="", init=False)
@@ -42,7 +42,7 @@ class Column:
         self.name = name
 
     @property
-    def column_name(self) -> str | DefinedLater | None:
+    def column_name(self) -> str | type[DefinedLater] | None:  # ty: ignore[invalid-type-form]
         """Return the effective column name (alias if set, otherwise attribute name)."""
         return self.alias or self.name
 

@@ -85,7 +85,7 @@ class BaseSchema:
 
         for cs in cls.column_sets().values():
             if not cs.regex and isinstance(cs.members, list):
-                names.extend(cs.members)
+                names.extend(cs.members)  # ty: ignore[invalid-argument-type]
 
         return names
 
@@ -119,7 +119,7 @@ class BaseSchema:
 
         key_column_map: dict[str, Column] = {}
         for col in cls.columns().values():
-            if col.alias is DefinedLater or isinstance(col.alias, DefinedLater):
+            if col.alias is DefinedLater:
                 raise ColumnAliasNotYetDefinedError(col.name)
             key = col.alias if isinstance(col.alias, str) else col.name
             key_column_map[key] = col
@@ -131,7 +131,7 @@ class BaseSchema:
         consumed: list[bool] = [col is not None for col in column_bag]
 
         for cs in cls.column_sets().values():
-            if cs.members is DefinedLater or isinstance(cs.members, DefinedLater):
+            if cs.members is DefinedLater:
                 raise ColumnSetMembersNotYetDefinedError(cs.name)
 
         exact_sets = [cs for cs in cls.column_sets().values() if not cs.regex]
@@ -148,7 +148,9 @@ class BaseSchema:
                         column_consumed_map[cs.name].append(col_name)
 
             for cs in regex_sets:
-                if isinstance(cs.members, list) and any(re.match(pattern, col_name) for pattern in cs.members):
+                if isinstance(cs.members, list) and any(
+                    re.match(pattern, col_name) for pattern in cs.members
+                ):  # ty: ignore[no-matching-overload]
                     if consumed[i] and not greedy:
                         raise ColumnGroupError(col_name, column_bag[i], cs)
                     if not consumed[i]:
@@ -183,7 +185,9 @@ class BaseSchema:
                 if col_name not in defined:
                     is_matched = False
                     for cs in cls.column_sets().values():
-                        if cs.regex and isinstance(cs.members, list) and any(re.match(p, col_name) for p in cs.members):
+                        if (
+                            cs.regex and isinstance(cs.members, list) and any(re.match(p, col_name) for p in cs.members)
+                        ):  # ty: ignore[no-matching-overload]
                             is_matched = True
                             break
                     if not is_matched:

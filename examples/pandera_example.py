@@ -1,5 +1,5 @@
-import pandera as pa
-from pandera.typing import DataFrame, Series
+import pandera as pa  # ty: ignore[unresolved-import]
+from pandera.typing import DataFrame, Series  # ty: ignore[unresolved-import]
 
 
 class UserSchema(pa.DataFrameModel):

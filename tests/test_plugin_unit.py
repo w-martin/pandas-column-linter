@@ -1,4 +1,6 @@
+import builtins
 import json
+import sys
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -6,6 +8,15 @@ from unittest.mock import MagicMock, patch
 from mypy.options import Options
 
 from typedframes.mypy import TypedFramesPlugin as PandasLinterPlugin
+
+original_import = builtins.__import__
+
+
+def make_import_fail(name, *args, **kwargs):
+    """Helper to make specific imports fail."""
+    if name == "typedframes._rust_linter":
+        raise ImportError("Mocked import failure")
+    return original_import(name, *args, **kwargs)
 
 
 class TestPandasLinterPluginUnit(unittest.TestCase):
@@ -16,21 +27,16 @@ class TestPandasLinterPluginUnit(unittest.TestCase):
         self.error_data = [{"line": 10, "message": "Column 'foo' does not exist"}]
 
     def test_should_report_error_on_exact_line_match(self) -> None:
-        # arrange
+        # arrange - mock the rust extension
+        mock_check_file = MagicMock(return_value=json.dumps(self.error_data))
+
         with (
             patch("typedframes.mypy.get_project_root") as mock_root,
             patch("typedframes.mypy.is_enabled") as mock_enabled,
-            patch("subprocess.run") as mock_run,
-            patch("os.path.exists") as mock_exists,
+            patch.dict(sys.modules, {"typedframes._rust_linter": MagicMock(check_file=mock_check_file)}),
         ):
-            mock_exists.return_value = True
             mock_enabled.return_value = True
             mock_root.return_value = Path()
-
-            mock_process = MagicMock()
-            mock_process.returncode = 0
-            mock_process.stdout = json.dumps(self.error_data)
-            mock_run.return_value = mock_process
 
             context = MagicMock()
             context.api.path = self.test_file
@@ -47,20 +53,15 @@ class TestPandasLinterPluginUnit(unittest.TestCase):
 
         # Test non-match branch
         new_plugin = PandasLinterPlugin(Options())  # New plugin to avoid cache
+        mock_check_file_empty = MagicMock(return_value=json.dumps([]))
+
         with (
             patch("typedframes.mypy.get_project_root") as mock_root,
             patch("typedframes.mypy.is_enabled") as mock_enabled,
-            patch("subprocess.run") as mock_run,
-            patch("os.path.exists") as mock_exists,
+            patch.dict(sys.modules, {"typedframes._rust_linter": MagicMock(check_file=mock_check_file_empty)}),
         ):
-            mock_exists.return_value = True
             mock_enabled.return_value = True
             mock_root.return_value = Path()
-
-            mock_process = MagicMock()
-            mock_process.returncode = 0
-            mock_process.stdout = json.dumps([])
-            mock_run.return_value = mock_process
 
             context = MagicMock()
             context.api.path = "other.py"  # Different file to be sure
@@ -74,21 +75,16 @@ class TestPandasLinterPluginUnit(unittest.TestCase):
             context.api.fail.assert_not_called()
 
     def test_should_report_error_on_fuzzy_line_match(self) -> None:
-        # arrange
+        # arrange - mock the rust extension
+        mock_check_file = MagicMock(return_value=json.dumps(self.error_data))
+
         with (
             patch("typedframes.mypy.get_project_root") as mock_root,
             patch("typedframes.mypy.is_enabled") as mock_enabled,
-            patch("subprocess.run") as mock_run,
-            patch("os.path.exists") as mock_exists,
+            patch.dict(sys.modules, {"typedframes._rust_linter": MagicMock(check_file=mock_check_file)}),
         ):
-            mock_exists.return_value = True
             mock_enabled.return_value = True
             mock_root.return_value = Path()
-
-            mock_process = MagicMock()
-            mock_process.returncode = 0
-            mock_process.stdout = json.dumps(self.error_data)
-            mock_run.return_value = mock_process
 
             context = MagicMock()
             context.api.path = self.test_file
@@ -143,27 +139,43 @@ class TestPandasLinterPluginUnit(unittest.TestCase):
         assert self.plugin._run_linter("foo.pyi") == []
 
     def test_should_handle_missing_binary(self) -> None:
-        # arrange
-        with patch("os.path.exists") as mock_exists:
+        # arrange - make the rust extension import fail, then check binary path
+        new_plugin = PandasLinterPlugin(Options())
+
+        with (
+            patch("typedframes.mypy.get_project_root") as mock_root,
+            patch("typedframes.mypy.is_enabled") as mock_enabled,
+            patch("builtins.__import__", side_effect=make_import_fail),
+            patch("os.path.exists") as mock_exists,
+        ):
+            mock_enabled.return_value = True
+            mock_root.return_value = Path()
             mock_exists.return_value = False
 
             # act
-            errors = self.plugin._run_linter(self.test_file)
+            errors = new_plugin._run_linter(self.test_file)
 
             # assert
             assert errors == []
 
     def test_should_handle_subprocess_error(self) -> None:
-        # arrange
+        # arrange - make the rust extension import fail, then subprocess error
+        new_plugin = PandasLinterPlugin(Options())
+
         with (
+            patch("typedframes.mypy.get_project_root") as mock_root,
+            patch("typedframes.mypy.is_enabled") as mock_enabled,
+            patch("builtins.__import__", side_effect=make_import_fail),
             patch("os.path.exists") as mock_exists,
             patch("subprocess.run") as mock_run,
         ):
+            mock_enabled.return_value = True
+            mock_root.return_value = Path()
             mock_exists.return_value = True
             mock_run.side_effect = Exception("error")
 
             # act
-            errors = self.plugin._run_linter(self.test_file)
+            errors = new_plugin._run_linter(self.test_file)
 
             # assert
             assert errors == []
@@ -181,17 +193,19 @@ class TestPandasLinterPluginUnit(unittest.TestCase):
         assert plugin("1.0") == TypedFramesPlugin
 
     def test_plugin_should_handle_unsuccessful_subprocess(self) -> None:
-        # arrange
+        # arrange - make the rust extension import fail, then subprocess returns error
         new_plugin = PandasLinterPlugin(Options())
+
         with (
-            patch("os.path.exists") as mock_exists,
-            patch("subprocess.run") as mock_run,
             patch("typedframes.mypy.get_project_root") as mock_root,
             patch("typedframes.mypy.is_enabled") as mock_enabled,
+            patch("builtins.__import__", side_effect=make_import_fail),
+            patch("os.path.exists") as mock_exists,
+            patch("subprocess.run") as mock_run,
         ):
-            mock_exists.return_value = True
-            mock_root.return_value = Path()
             mock_enabled.return_value = True
+            mock_root.return_value = Path()
+            mock_exists.return_value = True
 
             mock_process = MagicMock()
             mock_process.returncode = 1

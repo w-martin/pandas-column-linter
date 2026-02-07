@@ -89,7 +89,9 @@ class PandasFrame(pd.DataFrame, Generic[SchemaT]):
 
         return cls(df, schema=schema, column_consumed_map=column_consumed_map)
 
-    def __getattr__(self, item: str) -> pd.Series | pd.DataFrame:
+    def __getattr__(
+        self, item: str
+    ) -> pd.Series | pd.DataFrame:  # ty: ignore[invalid-method-override, override-of-final-method]
         """
         Access columns by schema attribute name.
 
@@ -97,21 +99,21 @@ class PandasFrame(pd.DataFrame, Generic[SchemaT]):
         before falling back to standard pandas attribute access.
         """
         if item.startswith("_") or item in {"_schema_class", "_column_consumed_map"}:
-            return object.__getattribute__(self, item)  # type: ignore[return-value]
+            return object.__getattribute__(self, item)  # type: ignore[return-value]  # ty: ignore[unused-ignore-comment]
 
         try:
             schema = object.__getattribute__(self, "_schema_class")
             consumed_map = object.__getattribute__(self, "_column_consumed_map")
         except AttributeError:
-            return super().__getattribute__(item)  # type: ignore[return-value]
+            return super().__getattribute__(item)  # type: ignore[return-value]  # ty: ignore[unused-ignore-comment]
 
         if schema is None:
-            return super().__getattribute__(item)  # type: ignore[return-value]
+            return super().__getattribute__(item)  # type: ignore[return-value]  # ty: ignore[unused-ignore-comment]
 
         column_map = schema.columns()
         if item in column_map:
             col = column_map[item]
-            if isinstance(col.alias, DefinedLater):
+            if col.alias is DefinedLater:
                 raise ColumnAliasNotYetDefinedError(col.name)
             effective_name = col.alias if isinstance(col.alias, str) else col.name
             return self[effective_name]
@@ -119,7 +121,7 @@ class PandasFrame(pd.DataFrame, Generic[SchemaT]):
         column_set_map = schema.column_sets()
         if item in column_set_map:
             cs = column_set_map[item]
-            if isinstance(cs.members, DefinedLater):
+            if cs.members is DefinedLater:
                 raise ColumnSetMembersNotYetDefinedError(cs.name)
             matched = consumed_map.get(cs.name, [])
             return self[matched]
@@ -130,7 +132,7 @@ class PandasFrame(pd.DataFrame, Generic[SchemaT]):
             col_names = group.get_column_names(consumed_map)
             return self[col_names]
 
-        return super().__getattribute__(item)  # type: ignore[return-value]
+        return super().__getattribute__(item)  # type: ignore[return-value]  # ty: ignore[unused-ignore-comment]
 
     @property
     def _constructor(self) -> type[Self]:

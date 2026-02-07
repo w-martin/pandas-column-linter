@@ -34,7 +34,7 @@ Usage:
 
 from __future__ import annotations
 
-from typing import Annotated, TypeVar
+from typing import Annotated, Any, TypeVar
 
 from .base_schema import BaseSchema
 
@@ -66,7 +66,7 @@ class PolarsFrame:
 
     """
 
-    def __class_getitem__(cls, schema: type[SchemaT]) -> type:
+    def __class_getitem__(cls, schema: type[SchemaT]) -> Any:
         """
         Create an Annotated type combining pl.DataFrame with schema metadata.
 
