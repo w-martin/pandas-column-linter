@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, overload
 
 import pandas as pd
 
 from .base_schema import BaseSchema
+from .column import Column
+from .column_group import ColumnGroup
+from .column_set import ColumnSet
 
 if TYPE_CHECKING:
     from typing import Self
@@ -16,10 +19,10 @@ SchemaT = TypeVar("SchemaT", bound=BaseSchema)
 
 class PandasFrame(pd.DataFrame, Generic[SchemaT]):
     """
-    Pandas DataFrame subclass with schema-aware attribute access.
+    Pandas DataFrame subclass with schema-aware column access.
 
     Preserves all pandas functionality while adding schema-based
-    column access via attribute names.
+    column access via ``__getitem__`` overloads.
 
     Attributes:
         _schema_class: The schema class for this DataFrame.
@@ -31,7 +34,8 @@ class PandasFrame(pd.DataFrame, Generic[SchemaT]):
             email = Column(type=str)
 
         df = PandasFrame.from_schema(pd.read_csv("data.csv"), UserData)
-        df.user_id  # Access column by schema attribute name
+        df[UserData.user_id]  # pd.Series via Column descriptor
+        df["email"]           # pd.Series via string key (standard pandas)
 
     """
 
@@ -86,52 +90,44 @@ class PandasFrame(pd.DataFrame, Generic[SchemaT]):
 
         return cls(df, schema=schema, column_consumed_map=column_consumed_map)
 
-    def _lookup_schema_item(
-        self, item: str, schema: type[SchemaT], consumed_map: dict[str, list[str]]
-    ) -> pd.Series | pd.DataFrame | None:
-        """Look up item in schema columns, column sets, and column groups."""
-        # Check columns
-        if item in schema.columns():
-            col = schema.columns()[item]
-            return self[col.column_name]
+    if TYPE_CHECKING:
+        @overload
+        def __getitem__(self, key: Column) -> pd.Series: ...
 
-        # Check column sets
-        if item in schema.column_sets():
-            cs = schema.column_sets()[item]
-            return self[consumed_map.get(cs.name, [])]
+        @overload
+        def __getitem__(self, key: ColumnSet) -> pd.DataFrame: ...
 
-        # Check column groups
-        if item in schema.column_groups():
-            group = schema.column_groups()[item]
-            return self[group.get_column_names(consumed_map)]
+        @overload
+        def __getitem__(self, key: ColumnGroup) -> pd.DataFrame: ...
 
-        return None
+        @overload
+        def __getitem__(self, key: str) -> pd.Series: ...
 
-    def __getattr__(  # ty: ignore[override-of-final-method, invalid-method-override]
-        self, item: str
+        @overload
+        def __getitem__(self, key: list[str]) -> pd.DataFrame: ...
+
+        @overload
+        def __getitem__(self, key: pd.Series) -> PandasFrame[SchemaT]: ...
+
+    def __getitem__(
+            self,
+            key: Column | ColumnSet | ColumnGroup | str | list[str] | pd.Series,
     ) -> pd.Series | pd.DataFrame:
         """
-        Access columns by schema attribute name.
+        Access columns by schema descriptor, string key, or boolean mask.
 
-        Schema-defined Columns, ColumnSets, and ColumnGroups are accessed
-        before falling back to standard pandas attribute access.
+        Supports Column, ColumnSet, ColumnGroup descriptors from the schema,
+        as well as standard pandas string and list-of-string access.
         """
-        if item.startswith("_") or item in {"_schema_class", "_column_consumed_map"}:
-            return object.__getattribute__(self, item)
-
-        try:
-            schema = object.__getattribute__(self, "_schema_class")
-            consumed_map = object.__getattribute__(self, "_column_consumed_map")
-        except AttributeError:
-            schema = None
-            consumed_map = {}
-
-        if schema is not None:
-            result = self._lookup_schema_item(item, schema, consumed_map)
-            if result is not None:
-                return result
-
-        return super().__getattribute__(item)
+        if isinstance(key, Column):
+            return super().__getitem__(key.column_name)
+        if isinstance(key, ColumnSet):
+            matched = self._column_consumed_map.get(key.name, [])
+            return super().__getitem__(matched)
+        if isinstance(key, ColumnGroup):
+            names = key.get_column_names(self._column_consumed_map)
+            return super().__getitem__(names)
+        return super().__getitem__(key)
 
     @property
     def _constructor(self) -> type[Self]:

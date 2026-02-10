@@ -22,6 +22,14 @@ class SensorSchema(BaseSchema):
     temperatures = ColumnSet(members=["temp_1", "temp_2"], type=float)
 
 
+class GroupedSchema(BaseSchema):
+    """Test schema with ColumnGroup."""
+
+    user_id = Column(type=int)
+    email = Column(type=str)
+    all_fields = ColumnGroup(members=[user_id, email])
+
+
 class TestPandasFrame(unittest.TestCase):
     """Unit tests for PandasFrame."""
 
@@ -37,53 +45,92 @@ class TestPandasFrame(unittest.TestCase):
         self.assertIsInstance(sut, PandasFrame)
         self.assertEqual(sut.schema, UserSchema)
 
-    def test_should_access_column_by_attribute(self) -> None:
-        """Test that columns can be accessed by schema attribute name."""
+    def test_should_access_column_by_descriptor(self) -> None:
+        """Test that columns can be accessed by schema Column descriptor."""
         # arrange
         raw_df = pd.DataFrame({"user_id": [1, 2], "email_address": ["a@b.com", "c@d.com"]})
         sut = PandasFrame.from_schema(raw_df, UserSchema)
 
         # act
-        result = sut.user_id
+        result = sut[UserSchema.user_id]
 
         # assert
         self.assertIsInstance(result, pd.Series)
         self.assertEqual(result.tolist(), [1, 2])
 
-    def test_should_access_aliased_column_by_attribute(self) -> None:
-        """Test that aliased columns can be accessed by schema attribute name."""
+    def test_should_access_aliased_column_by_descriptor(self) -> None:
+        """Test that aliased columns can be accessed by schema Column descriptor."""
         # arrange
         raw_df = pd.DataFrame({"user_id": [1, 2], "email_address": ["a@b.com", "c@d.com"]})
         sut = PandasFrame.from_schema(raw_df, UserSchema)
 
         # act
-        result = sut.email  # Attribute name, maps to email_address
+        result = sut[UserSchema.email]
 
         # assert
         self.assertIsInstance(result, pd.Series)
         self.assertEqual(result.tolist(), ["a@b.com", "c@d.com"])
 
-    def test_should_access_column_set_by_attribute(self) -> None:
-        """Test that ColumnSet can be accessed by attribute name."""
+    def test_should_access_column_set_by_descriptor(self) -> None:
+        """Test that ColumnSet can be accessed by descriptor."""
         # arrange
         raw_df = pd.DataFrame({"timestamp": ["t1"], "temp_1": [20.0], "temp_2": [25.0]})
         sut = PandasFrame.from_schema(raw_df, SensorSchema)
 
         # act
-        result = sut.temperatures
+        result = sut[SensorSchema.temperatures]
 
         # assert
         self.assertIsInstance(result, pd.DataFrame)
         self.assertEqual(list(result.columns), ["temp_1", "temp_2"])
 
-    def test_should_preserve_type_after_filtering(self) -> None:
-        """Test that filtering preserves PandasFrame type."""
+    def test_should_access_column_group_by_descriptor(self) -> None:
+        """Test that ColumnGroups can be accessed by descriptor."""
+        # arrange
+        raw_df = pd.DataFrame({"user_id": [1, 2], "email": ["a@b.com", "c@d.com"]})
+        sut = PandasFrame.from_schema(raw_df, GroupedSchema)
+
+        # act
+        result = sut[GroupedSchema.all_fields]
+
+        # assert
+        self.assertIsInstance(result, pd.DataFrame)
+        self.assertEqual(list(result.columns), ["user_id", "email"])
+
+    def test_should_access_column_by_string_key(self) -> None:
+        """Test that columns can be accessed by string key (standard pandas)."""
         # arrange
         raw_df = pd.DataFrame({"user_id": [1, 2], "email_address": ["a@b.com", "c@d.com"]})
         sut = PandasFrame.from_schema(raw_df, UserSchema)
 
         # act
-        result = sut[sut.user_id > 1]
+        result = sut["user_id"]
+
+        # assert
+        self.assertIsInstance(result, pd.Series)
+        self.assertEqual(result.tolist(), [1, 2])
+
+    def test_should_access_columns_by_string_list(self) -> None:
+        """Test that multiple columns can be accessed by list of strings."""
+        # arrange
+        raw_df = pd.DataFrame({"user_id": [1, 2], "email_address": ["a@b.com", "c@d.com"]})
+        sut = PandasFrame.from_schema(raw_df, UserSchema)
+
+        # act
+        result = sut[["user_id", "email_address"]]
+
+        # assert
+        self.assertIsInstance(result, pd.DataFrame)
+        self.assertEqual(list(result.columns), ["user_id", "email_address"])
+
+    def test_should_filter_with_boolean_series(self) -> None:
+        """Test that boolean series filtering preserves PandasFrame type."""
+        # arrange
+        raw_df = pd.DataFrame({"user_id": [1, 2], "email_address": ["a@b.com", "c@d.com"]})
+        sut = PandasFrame.from_schema(raw_df, UserSchema)
+
+        # act
+        result = sut[sut["user_id"] > 1]
 
         # assert
         self.assertIsInstance(result, PandasFrame)
@@ -166,8 +213,8 @@ class TestPandasFrame(unittest.TestCase):
         merged = sut.merge(df2, on="user_id")
 
         # act
-        user_ids = merged.user_id
-        emails = merged.email
+        user_ids = merged[UserSchema.user_id]
+        emails = merged[UserSchema.email]
 
         # assert
         self.assertEqual(user_ids.tolist(), [1, 2])
@@ -178,11 +225,11 @@ class TestPandasFrame(unittest.TestCase):
         # arrange
         raw_df = pd.DataFrame({"user_id": [1, 2, 3], "email_address": ["a@b.com", "c@d.com", "e@f.com"]})
         sut = PandasFrame.from_schema(raw_df, UserSchema)
-        filtered = sut[sut.user_id > 1]
+        filtered = sut[sut["user_id"] > 1]
 
         # act
-        user_ids = filtered.user_id
-        emails = filtered.email
+        user_ids = filtered[UserSchema.user_id]
+        emails = filtered[UserSchema.email]
 
         # assert
         self.assertEqual(user_ids.tolist(), [2, 3])
@@ -196,52 +243,10 @@ class TestPandasFrame(unittest.TestCase):
         selected = sut[["user_id", "email_address"]]
 
         # act
-        user_ids = selected.user_id
+        user_ids = selected[UserSchema.user_id]
 
         # assert
         self.assertEqual(user_ids.tolist(), [1, 2])
-
-    def test_should_access_column_group_by_attribute(self) -> None:
-        """Test that ColumnGroups can be accessed by attribute name."""
-
-        # arrange
-        class GroupedSchema(BaseSchema):
-            user_id = Column(type=int)
-            email = Column(type=str)
-            all_fields = ColumnGroup(members=[user_id, email])
-
-        raw_df = pd.DataFrame({"user_id": [1, 2], "email": ["a@b.com", "c@d.com"]})
-        sut = PandasFrame.from_schema(raw_df, GroupedSchema)
-
-        # act
-        result = sut.all_fields
-
-        # assert
-        self.assertIsInstance(result, pd.DataFrame)
-        self.assertEqual(list(result.columns), ["user_id", "email"])
-
-    def test_should_fallback_to_pandas_when_no_schema(self) -> None:
-        """Test that PandasFrame without schema falls back to pandas attribute access."""
-        # arrange
-        sut = PandasFrame({"user_id": [1, 2], "email": ["a@b.com", "c@d.com"]})
-
-        # act
-        result = sut.shape
-
-        # assert
-        self.assertEqual(result, (2, 2))
-
-    def test_should_fallback_for_non_schema_attribute(self) -> None:
-        """Test that non-schema attributes fall through to pandas."""
-        # arrange
-        raw_df = pd.DataFrame({"user_id": [1, 2], "email_address": ["a@b.com", "c@d.com"]})
-        sut = PandasFrame.from_schema(raw_df, UserSchema)
-
-        # act — dtypes is a pandas attribute, not in schema
-        result = sut.dtypes
-
-        # assert
-        self.assertIsNotNone(result)
 
     def test_should_create_with_explicit_consumed_map(self) -> None:
         """Test that from_schema accepts a pre-computed consumed_map."""
@@ -256,36 +261,13 @@ class TestPandasFrame(unittest.TestCase):
         self.assertIsInstance(sut, PandasFrame)
         self.assertEqual(sut._column_consumed_map, consumed_map)
 
-    def test_should_handle_getattr_for_underscore_attrs(self) -> None:
-        """Test that __getattr__ delegates underscore attrs to object.__getattribute__."""
+    def test_should_fallback_to_pandas_when_no_schema(self) -> None:
+        """Test that PandasFrame without schema works with standard pandas access."""
         # arrange
-        raw_df = pd.DataFrame({"user_id": [1, 2], "email_address": ["a@b.com", "c@d.com"]})
-        sut = PandasFrame.from_schema(raw_df, UserSchema)
+        sut = PandasFrame({"user_id": [1, 2], "email": ["a@b.com", "c@d.com"]})
 
-        # act/assert — access a non-existent underscore attr via __getattr__
-        # Since __getattr__ is only called when __getattribute__ fails,
-        # we need to access a private attr that doesn't exist
-        with self.assertRaises(AttributeError):
-            sut.__getattr__("_nonexistent_private_attr")
+        # act
+        result = sut.shape
 
-    def test_should_handle_getattr_without_schema_set(self) -> None:
-        """Test that __getattr__ handles missing _schema_class gracefully."""
-        # arrange — create a PandasFrame then delete the schema attr to simulate
-        # the internal state during pandas construction
-        sut = PandasFrame({"user_id": [1, 2]})
-        del sut._schema_class
-
-        # act — accessing a non-existent attr should hit the AttributeError
-        # fallback path (lines 125-127) and then super().__getattribute__
-        with self.assertRaises(AttributeError):
-            _ = sut.nonexistent_attr
-
-    def test_should_fallback_to_super_for_unknown_attr(self) -> None:
-        """Test that unknown attributes fall through to super().__getattribute__."""
-        # arrange
-        raw_df = pd.DataFrame({"user_id": [1, 2], "email_address": ["a@b.com", "c@d.com"]})
-        sut = PandasFrame.from_schema(raw_df, UserSchema)
-
-        # act/assert — access a non-existent attr should raise AttributeError
-        with self.assertRaises(AttributeError):
-            _ = sut.nonexistent_column
+        # assert
+        self.assertEqual(result, (2, 2))

@@ -46,7 +46,7 @@ def process(df: PandasFrame[UserData]) -> None:
 **What you get:**
 
 - ✅ **Static analysis** - Catch column errors at lint-time with mypy or the standalone checker
-- ✅ **Beautiful runtime UX** - `df.column_group.mean()` (pandas) instead of ugly column lists
+- ✅ **Beautiful runtime UX** - `df[Schema.column_group].mean()` (pandas) instead of ugly column lists
 - ✅ **Works with pandas AND polars** - Same schema API, explicit backend types
 - ✅ **Dynamic column matching** - Regex-based ColumnSets for time-series data
 - ✅ **Zero runtime overhead** - No validation, no slowdown
@@ -92,19 +92,19 @@ from typedframes.pandas import PandasFrame
 # Load data with schema
 df = PandasFrame.from_schema(pd.read_csv("sales.csv"), SalesData)
 
-# Clean attribute access
-print(df.revenue.sum())
-print(df.metrics.mean())  # All metric_* columns
+# Access columns via schema descriptors
+print(df[SalesData.revenue].sum())
+print(df[SalesData.metrics].mean())  # All metric_* columns
 
 
 # Type-safe pandas operations
 def analyze(data: PandasFrame[SalesData]) -> float:
-    return data['revenue'].mean()  # ✓ Type checker knows this column exists
-    # return data['profit'].mean()   # ✗ Error at lint-time
+    return data[SalesData.revenue].mean()  # ✓ Type checker knows this is a float Column
+    # return data['profit'].mean()         # ✗ Error at lint-time
 
 
-# Pandas methods work as expected
-filtered = df[df['revenue'] > 1000]
+# Standard pandas access still works
+filtered = df[df[SalesData.revenue] > 1000]
 grouped = df.groupby('customer_id')['revenue'].sum()
 ```
 
@@ -210,23 +210,24 @@ Fast feedback reduces development time. The typedframes Rust binary provides nea
 
 **Benchmark results** (12 Python files, 5 runs each, caches cleared):
 
-| Tool               | Version | What it does                  | Time         |
-|--------------------|---------|-------------------------------|--------------|
-| typedframes        | 0.1.0   | DataFrame column checker      | 1ms ±19µs    |
-| ruff               | 0.14.13 | Linter (no type checking)     | 53ms ±9ms    |
-| ty                 | 0.0.14  | Type checker                  | 131ms ±14ms  |
-| pyrefly            | 0.51.1  | Type checker                  | 248ms ±14ms  |
-| mypy               | 1.19.1  | Type checker (no plugin)      | 6.88s ±170ms |
-| mypy + typedframes | 1.19.1  | Type checker + column checker | 6.98s ±92ms  |
-| pyright            | 1.1.408 | Type checker                  | 2.02s ±201ms |
+| Tool               | Version | What it does                     | Time         |
+|--------------------|---------|----------------------------------|--------------|
+| typedframes        | 0.1.0   | Column name resolution (lexical) | 1ms ±19µs    |
+| ruff               | 0.14.13 | Linter (no type checking)        | 53ms ±9ms    |
+| ty                 | 0.0.14  | Type checker                     | 131ms ±14ms  |
+| pyrefly            | 0.51.1  | Type checker                     | 248ms ±14ms  |
+| mypy               | 1.19.1  | Type checker (no plugin)         | 6.88s ±170ms |
+| mypy + typedframes | 1.19.1  | Type checker + column checker    | 6.98s ±92ms  |
+| pyright            | 1.1.408 | Type checker                     | 2.02s ±201ms |
 
 **Note:** On small codebases, startup time dominates. On larger projects, ty and pyrefly are typically 10-60x faster
 than mypy/pyright.
 
 *Run `uv run python benchmarks/benchmark_checkers.py` to reproduce.*
 
-The typedframes binary performs only DataFrame column checking, while full type checkers (mypy, pyright, ty) analyze all
-Python types. Use both: the binary for fast iteration, mypy for comprehensive checking.
+The typedframes binary performs lexical column name resolution within a single file. It does not perform cross-file type
+inference. Full type checkers (mypy, pyright, ty) analyze all Python types across your entire codebase. Use both: the
+binary for fast iteration, mypy for comprehensive checking.
 
 **Note:** ty (Astral) does not currently support mypy plugins, so use the standalone binary for column checking with ty.
 
@@ -394,12 +395,12 @@ from typedframes.pandas import PandasFrame
 df = PandasFrame.from_schema(pd.read_csv("sensors.csv"), TimeSeriesData)
 
 # Access column groups as DataFrames
-temps = df.temperature  # All temp_sensor_* columns
-all_sensors = df.sensors  # All sensor columns
+temps = df[TimeSeriesData.temperature]  # All temp_sensor_* columns
+all_sensors = df[TimeSeriesData.sensors]  # All sensor columns
 
 # Clean operations
-avg_temp = df.temperature.mean()
-max_pressure = df.pressure.max()
+avg_temp = df[TimeSeriesData.temperature].mean()
+max_pressure = df[TimeSeriesData.pressure].max()
 
 # Standard pandas access still works
 df['timestamp']  # Single column
@@ -418,14 +419,17 @@ def daily_summary(data: PandasFrame[TimeSeriesData]) -> PandasFrame[DailySummary
     data['date']  # ✗ Error: Column 'date' not in TimeSeriesData
 
     # Type checker validates ColumnSet access
-    temps = data.temperature  # ✓ OK - ColumnSet exists
+    temps = data[TimeSeriesData.temperature]  # ✓ OK - ColumnSet exists
     summary = temps.mean()
     return summary
 ```
 
 ### Dynamic Column Matching
 
-Perfect for time-series data where column counts change:
+Perfect for time-series data where column counts change. Regex ColumnSets match actual DataFrame columns at
+`from_schema()` time — the matched columns are stored and used when you access `df[Schema.sensors]`. Static analysis
+validates that the ColumnSet *name* exists in the schema, but cannot verify which columns the regex will match at
+runtime.
 
 ```python
 class SensorReadings(BaseSchema):
@@ -435,10 +439,10 @@ class SensorReadings(BaseSchema):
 
 # Works regardless of how many sensor columns exist
 df = PandasFrame.from_schema(pd.read_csv("readings_2024_01.csv"), SensorReadings)  # 50 sensors
-df.sensors.mean()  # All sensor columns
+df[SensorReadings.sensors].mean()  # All sensor columns
 
 df = PandasFrame.from_schema(pd.read_csv("readings_2024_02.csv"), SensorReadings)  # 75 sensors
-df.sensors.mean()  # All sensor columns (different count, same code)
+df[SensorReadings.sensors].mean()  # All sensor columns (different count, same code)
 ```
 
 ---
@@ -607,8 +611,8 @@ class SensorData(BaseSchema):
 df = PandasFrame.from_schema(pd.read_csv("sensors.csv"), SensorData)
 
 # Clean, type-safe operations
-avg_temp_per_row = df.temperature.mean(axis=1)
-all_readings_stats = df.all_sensors.describe()
+avg_temp_per_row = df[SensorData.temperature].mean(axis=1)
+all_readings_stats = df[SensorData.all_sensors].describe()
 ```
 
 ### Multi-Step Pipeline
@@ -698,6 +702,12 @@ We believe static analysis catches bugs earlier and cheaper than runtime validat
 - ❌ Statistical checks (use Pandera)
 - ❌ Data quality monitoring (use Great Expectations)
 
+**Important:** `PandasFrame.from_schema()` is a *trust assertion*, not a validation step. It tells the type checker "
+this
+DataFrame conforms to this schema" without verifying the actual data. The linter catches mistakes in your code (wrong
+column names, schema mismatches between functions), but it cannot verify that a CSV file contains the expected columns.
+For runtime validation of external data, pair typedframes with [Pandera](https://pandera.readthedocs.io/).
+
 ### Explicit Backend Types
 
 We use explicit `PandasFrame` and `PolarsFrame` types because:
@@ -777,8 +787,8 @@ MIT License - see [LICENSE](LICENSE)
   runtime validation
 - [ ] **Optional runtime validation** - `Field` class with constraints (`gt`, `ge`, `lt`, `le`) on Column definitions,
   opt-in validation at data load time
-- [ ] **IDE Integration (.pyi stubs)** - Generate `.pyi` stub files for schema definitions to enable autocomplete in
-  IDEs (VSCode, PyCharm) without running the type checker
+- [ ] **IDE Integration (.pyi stubs)** - Generate `.pyi` stub files for enhanced schema autocomplete in IDEs
+  (VSCode, PyCharm). Basic type inference already works via `__getitem__` overloads without stubs.
 
 ---
 
@@ -793,31 +803,22 @@ A: No, it complements it. Use typedframes for static analysis, Pandera for runti
 **Q: Is the standalone checker required?**
 A: No. You can use just the mypy plugin, just the standalone checker, or both. They catch the same errors.
 
+**Q: What works without any plugin?**
+A: The `__getitem__` overloads on `PandasFrame` mean that any type checker (mypy, pyright, ty) understands
+`df[Schema.column]` returns `pd.Series` and `df[Schema.column_set]` returns `pd.DataFrame` — no plugin or stubs needed.
+Column *name* validation (catching typos like `df["revnue"]` in string-based access) still requires the standalone
+checker or mypy plugin.
+
 **Q: What about pyright/pylance users?**
-A: The mypy plugin doesn't work with pyright yet. Use the standalone checker (`typedframes check`) for now. Pyright plugin is on the roadmap.
+A: The mypy plugin doesn't work with pyright. Use the standalone checker (`typedframes check`) for column name
+validation. Schema descriptor access (`df[Schema.column]`) works natively in pyright without any plugin.
 
 **Q: Does this work with existing pandas/polars code?**
 A: Yes. You can gradually adopt typedframes by adding schemas to new code. Existing code continues to work.
 
 **Q: What if my column name conflicts with a pandas/polars method?**
-A: Avoid using column names that match reserved DataFrame methods like `mean`, `sum`, `filter`, `select`, `head`,
-`tail`, etc. These will shadow the method when accessed via attribute syntax:
-
-```python
-class BadSchema(BaseSchema):
-    mean = Column(type=float)  # ⚠️ Shadows df.mean()
-    filter = Column(type=str)  # ⚠️ Shadows df.filter()
-
-
-# This calls your column, not the method!
-df.mean  # Returns the 'mean' column, not the mean() method
-
-# Use bracket syntax for methods when column names conflict
-df['mean'].mean()  # Access column 'mean', then call mean() method
-```
-
-The typedframes linter will warn you about these conflicts. Best practice is to use more descriptive names like
-`mean_value` or `filter_type`.
+A: No problem. Since column access uses bracket syntax with schema descriptors (`df[Schema.mean]`), there is no conflict
+with DataFrame methods (`df.mean()`). Both work independently.
 
 ---
 

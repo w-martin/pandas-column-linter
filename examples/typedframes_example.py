@@ -18,7 +18,7 @@ class UserSchema(BaseSchema):
 
 
 def pandas_example() -> None:
-    """Demonstrate PandasFrame usage with schema-aware attribute access."""
+    """Demonstrate PandasFrame usage with schema-aware column access."""
     raw_df = pd.DataFrame(
         {
             "user_id": [1, 2, 3],
@@ -31,12 +31,12 @@ def pandas_example() -> None:
     # Create a typed PandasFrame
     df: PandasFrame[UserSchema] = PandasFrame.from_schema(raw_df, UserSchema)
 
-    # Access columns by schema attribute names
-    print("User IDs:", df.user_id.tolist())
-    print("Emails:", df["email_address"].tolist())  # Uses alias name
+    # Access columns by schema descriptors
+    print("User IDs:", df[UserSchema.user_id].tolist())
+    print("Emails:", df[UserSchema.email].tolist())  # Resolves alias automatically
 
     # Schema operations preserve type
-    filtered = df[df.user_id > 1]
+    filtered = df[df[UserSchema.user_id] > 1]
     print("Filtered schema:", filtered.schema)
 
     # This would be caught by the linter:
