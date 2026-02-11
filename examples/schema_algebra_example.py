@@ -26,31 +26,39 @@ class Orders(BaseSchema):
     total = Column(type=float)
 
 
+# -- Wrap raw DataFrames as PandasFrames -------------------------------------
+
+users: PandasFrame[Users] = PandasFrame.from_schema(
+    pd.DataFrame(
+        {
+            "user_id": [1, 2],
+            "email": ["a@b.com", "c@d.com"],
+            "name": ["Alice", "Bob"],
+            "password_hash": ["hash1", "hash2"],
+        }
+    ),
+    Users,
+)
+
+orders: PandasFrame[Orders] = PandasFrame.from_schema(
+    pd.DataFrame(
+        {
+            "order_id": [101, 102],
+            "user_id": [1, 2],
+            "total": [29.99, 49.99],
+        }
+    ),
+    Orders,
+)
+
 # -- Combine schemas with + --------------------------------------------------
 # Use when you pd.merge or pd.concat(axis=1) two DataFrames.
 
 UserOrders = Users + Orders
 # UserOrders has: user_id, email, name, password_hash, order_id, total
 
-users_df = pd.DataFrame(
-    {
-        "user_id": [1, 2],
-        "email": ["a@b.com", "c@d.com"],
-        "name": ["Alice", "Bob"],
-        "password_hash": ["hash1", "hash2"],
-    }
-)
-
-orders_df = pd.DataFrame(
-    {
-        "order_id": [101, 102],
-        "user_id": [1, 2],
-        "total": [29.99, 49.99],
-    }
-)
-
 merged: PandasFrame[UserOrders] = PandasFrame.from_schema(
-    users_df.merge(orders_df, on="user_id"),
+    users.merge(orders, on=str(Users.user_id)),
     UserOrders,
 )
 print("Merged schema columns:", list(UserOrders.columns().keys()))
@@ -64,7 +72,7 @@ UserBasic = Users.select([Users.user_id, Users.email])
 # UserBasic has: user_id, email
 
 basic: PandasFrame[UserBasic] = PandasFrame.from_schema(
-    users_df[["user_id", "email"]],
+    users[UserBasic.all_column_names()],
     UserBasic,
 )
 print("Selected schema columns:", list(UserBasic.columns().keys()))
@@ -78,7 +86,7 @@ UserPublic = Users.drop([Users.password_hash])
 # UserPublic has: user_id, email, name
 
 public: PandasFrame[UserPublic] = PandasFrame.from_schema(
-    users_df.drop(columns=["password_hash"]),
+    users[UserPublic.all_column_names()],
     UserPublic,
 )
 print("Dropped schema columns:", list(UserPublic.columns().keys()))

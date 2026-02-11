@@ -16,6 +16,7 @@ dependencies = []
 
 [project.optional-dependencies]
 pandas = ["pandas>=3.0.0"]
+pandera = ["pandera>=0.22.0"]
 polars = ["polars>=1.37.1"]
 
 [tool.uv.workspace]
@@ -82,6 +83,7 @@ convention = "google"
 dev = [
     "typedframes-lint",
     "pandas>=3.0.0",
+    "pandera>=0.22.0",
     "polars>=1.37.1",
     "bandit>=1.7.0",
     "complexipy>=0.7.0",

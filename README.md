@@ -31,6 +31,7 @@ def process(df: PandasFrame[UserData]) -> None:
 - [Type Safety With Multiple Backends](#type-safety-with-multiple-backends)
 - [Features](#features)
 - [Advanced Usage](#advanced-usage)
+- [Pandera Integration](#pandera-integration)
 - [Examples](#examples)
 - [Philosophy](#philosophy)
 - [FAQ](#faq)
@@ -320,14 +321,14 @@ These tools serve different purposes:
 
 ### When to Use What
 
-| Use Case                                             | Recommended Tool                       |
-|------------------------------------------------------|----------------------------------------|
-| Static column checking (existing pandas/polars)      | **typedframes**                        |
-| Runtime data validation                              | Pandera                                |
-| Both static + runtime                                | typedframes + Pandera (separate tools) |
-| Cross-library portability (write once, run anywhere) | narwhals                               |
-| Immutable DataFrames from scratch                    | StaticFrame                            |
-| Pandas API type hints only                           | pandas-stubs                           |
+| Use Case                                             | Recommended Tool                    |
+|------------------------------------------------------|-------------------------------------|
+| Static column checking (existing pandas/polars)      | **typedframes**                     |
+| Runtime data validation                              | Pandera                             |
+| Both static + runtime                                | typedframes + `to_pandera_schema()` |
+| Cross-library portability (write once, run anywhere) | narwhals                            |
+| Immutable DataFrames from scratch                    | StaticFrame                         |
+| Pandas API type hints only                           | pandas-stubs                        |
 
 ---
 
@@ -474,19 +475,13 @@ class OrderSchema(BaseSchema):
 
 # Schema preserved through filtering
 def get_active_users(df: PandasFrame[UserSchema]) -> PandasFrame[UserSchema]:
-    return df[df['user_id'] > 100]  # ✓ Still PandasFrame[UserSchema]
-
-
-# Schema preserved through column selection
-def select_ids(df: PandasFrame[UserSchema]) -> PandasFrame[UserSchema]:
-    return df[['user_id', 'email']]  # ✓ Still PandasFrame[UserSchema]
+  return df[df[UserSchema.user_id] > 100]  # ✓ Still PandasFrame[UserSchema]
 
 
 # Schema preserved through merges
 users: PandasFrame[UserSchema] = ...
 orders: PandasFrame[OrderSchema] = ...
-merged = pd.merge(users, orders, on='user_id')  # Works as expected
-merged = users.merge(orders, on='user_id')       # Also works
+merged = users.merge(orders, on=str(UserSchema.user_id))
 ```
 
 **Polars:**
@@ -540,30 +535,72 @@ class Orders(BaseSchema):
     total = Column(type=float)
 
 
+users: PandasFrame[Users] = ...
+orders: PandasFrame[Orders] = ...
+
 # Combine schemas for merge/concat results
 UserOrders = Users + Orders
 # UserOrders has: user_id, email, password_hash, order_id, total
-
-merged: PandasFrame[UserOrders] = pd.merge(users_df, orders_df, on="user_id")
-
+merged: PandasFrame[UserOrders] = PandasFrame.from_schema(
+  users.merge(orders, on=str(Users.user_id)), UserOrders
+)
 
 # Select specific columns (column references, not strings)
 UserBasic = Users.select([Users.user_id, Users.email])
 # UserBasic has: user_id, email
-
-subset: PandasFrame[UserBasic] = users_df[["user_id", "email"]]
-
+basic: PandasFrame[UserBasic] = PandasFrame.from_schema(
+  users[UserBasic.all_column_names()], UserBasic
+)
 
 # Drop columns
 UserPublic = Users.drop([Users.password_hash])
 # UserPublic has: user_id, email
-
-public: PandasFrame[UserPublic] = users_df.drop(columns=["password_hash"])
+public: PandasFrame[UserPublic] = PandasFrame.from_schema(
+  users[UserPublic.all_column_names()], UserPublic
+)
 ```
 
 Overlapping columns with the same type are allowed (common after merges). Conflicting types raise `SchemaConflictError`.
 
 See [`examples/schema_algebra_example.py`](examples/schema_algebra_example.py) for a complete walkthrough.
+
+---
+
+## Pandera Integration
+
+Convert typedframes schemas to [Pandera](https://pandera.readthedocs.io/) schemas for runtime validation. Define your
+schema once, get both static and runtime checking.
+
+```shell
+pip install typedframes[pandera]
+```
+
+```python
+from typedframes import BaseSchema, Column
+from typedframes.pandera import to_pandera_schema
+import pandas as pd
+
+
+class UserData(BaseSchema):
+  user_id = Column(type=int)
+  email = Column(type=str)
+  age = Column(type=int, nullable=True)
+
+
+# Convert to pandera schema
+pandera_schema = to_pandera_schema(UserData)
+
+# Validate data at runtime
+df = pd.read_csv("users.csv")
+validated_df = pandera_schema.validate(df)  # Raises SchemaError on failure
+```
+
+The conversion maps:
+
+- `Column` type/nullable/alias to `pa.Column` dtype/nullable/name
+- `ColumnSet` with explicit members to individual `pa.Column` entries
+- `ColumnSet` with regex to `pa.Column(regex=True)`
+- `allow_extra_columns` to pandera's `strict` mode
 
 ---
 
@@ -706,7 +743,8 @@ We believe static analysis catches bugs earlier and cheaper than runtime validat
 this
 DataFrame conforms to this schema" without verifying the actual data. The linter catches mistakes in your code (wrong
 column names, schema mismatches between functions), but it cannot verify that a CSV file contains the expected columns.
-For runtime validation of external data, pair typedframes with [Pandera](https://pandera.readthedocs.io/).
+For runtime validation of external data, use [`to_pandera_schema()`](#pandera-integration) to convert your typedframes
+schemas to Pandera schemas.
 
 ### Explicit Backend Types
 
@@ -780,11 +818,10 @@ MIT License - see [LICENSE](LICENSE)
 - [x] Merge/join schema preservation
 - [x] Schema Algebra (`SchemaA + SchemaB`, `.select()`, `.drop()`)
 - [x] Column name collision warnings
+- [x] Pandera integration (`to_pandera_schema()`)
 
 **Planned:**
 
-- [ ] **Pandera integration** - `to_pandera_schema(MySchema)` to convert typedframes schemas to Pandera schemas for
-  runtime validation
 - [ ] **Optional runtime validation** - `Field` class with constraints (`gt`, `ge`, `lt`, `le`) on Column definitions,
   opt-in validation at data load time
 - [ ] **IDE Integration (.pyi stubs)** - Generate `.pyi` stub files for enhanced schema autocomplete in IDEs
@@ -798,7 +835,8 @@ MIT License - see [LICENSE](LICENSE)
 A: No. Define your schema once, use it with both. Just use the appropriate type (`PandasFrame` or `PolarsFrame`) in your function signatures.
 
 **Q: Does this replace Pandera?**
-A: No, it complements it. Use typedframes for static analysis, Pandera for runtime validation.
+A: No, it complements it. Use typedframes for static analysis, and `to_pandera_schema()` to convert your schemas to
+Pandera for runtime validation. See [Pandera Integration](#pandera-integration).
 
 **Q: Is the standalone checker required?**
 A: No. You can use just the mypy plugin, just the standalone checker, or both. They catch the same errors.
