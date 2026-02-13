@@ -207,17 +207,17 @@ mypy src/
 
 Fast feedback reduces development time. The typedframes Rust binary provides near-instant column checking.
 
-**Benchmark results** (12 Python files, 5 runs each, caches cleared):
+**Benchmark results** (11 Python files, 5 runs each, caches cleared):
 
-| Tool               | Version | What it does                     | Time         |
-|--------------------|---------|----------------------------------|--------------|
-| typedframes        | 0.1.0   | Column name resolution (lexical) | 1ms ±19µs    |
-| ruff               | 0.14.13 | Linter (no type checking)        | 53ms ±9ms    |
-| ty                 | 0.0.14  | Type checker                     | 131ms ±14ms  |
-| pyrefly            | 0.51.1  | Type checker                     | 248ms ±14ms  |
-| mypy               | 1.19.1  | Type checker (no plugin)         | 6.88s ±170ms |
-| mypy + typedframes | 1.19.1  | Type checker + column checker    | 6.98s ±92ms  |
-| pyright            | 1.1.408 | Type checker                     | 2.02s ±201ms |
+| Tool               | Version | What it does                  | Time         |
+|--------------------|---------|-------------------------------|--------------|
+| typedframes        | 0.1.0   | DataFrame column checker      | 3ms ±740µs   |
+| ruff               | 0.15.0  | Linter (no type checking)     | 39ms ±16ms   |
+| ty                 | 0.0.16  | Type checker                  | 136ms ±8ms   |
+| pyrefly            | 0.52.0  | Type checker                  | 268ms ±8ms   |
+| mypy               | 1.19.1  | Type checker (no plugin)      | 9.43s ±176ms |
+| mypy + typedframes | 1.19.1  | Type checker + column checker | 9.17s ±659ms |
+| pyright            | 1.1.408 | Type checker                  | 2.38s ±594ms |
 
 **Note:** On small codebases, startup time dominates. On larger projects, ty and pyrefly are typically 10-60x faster
 than mypy/pyright.
@@ -228,7 +228,7 @@ The typedframes binary performs lexical column name resolution within a single f
 inference. Full type checkers (mypy, pyright, ty) analyze all Python types across your entire codebase. Use both: the
 binary for fast iteration, mypy for comprehensive checking.
 
-The standalone checker is built with [`rustpython-parser`](https://crates.io/crates/rustpython-parser) for Python AST
+The standalone checker is built with [`ruff_python_parser`](https://github.com/astral-sh/ruff) for Python AST
 parsing.
 
 **Note:** ty (Astral) does not currently support mypy plugins, so use the standalone binary for column checking with ty.

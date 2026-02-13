@@ -1,6 +1,8 @@
 use pyo3::prelude::*;
-use rustpython_ast::{self as ast, Expr, Stmt};
-use rustpython_parser::{parse, source_code::LineIndex, Mode};
+use ruff_python_ast::{self as ast, Expr, Stmt};
+use ruff_python_parser::parse_module;
+use ruff_source_file::{LineIndex, SourceCode};
+use ruff_text_size::Ranged;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fs;
@@ -172,20 +174,24 @@ impl Linter {
         }
     }
 
+    fn source_location(&self, offset: ruff_text_size::TextSize) -> (usize, usize) {
+        let source_code = SourceCode::new(&self.source, self.line_index.as_ref().unwrap());
+        let loc = source_code.line_column(offset);
+        (loc.line.get() as usize, loc.column.get() as usize)
+    }
+
     pub fn check_file_internal(
         &mut self,
         source: &str,
-        path: &Path,
+        _path: &Path,
     ) -> Result<Vec<LintError>, anyhow::Error> {
         self.source = source.to_string();
         self.line_index = Some(LineIndex::from_source_text(source));
-        let parsed = parse(source, Mode::Module, &path.to_string_lossy())?;
+        let parsed = parse_module(source).map_err(|e| anyhow::anyhow!("{e}"))?;
         let mut errors = Vec::new();
 
-        if let ast::Mod::Module(m) = parsed {
-            for stmt in m.body {
-                self.visit_stmt(&stmt, &mut errors);
-            }
+        for stmt in parsed.into_syntax().body {
+            self.visit_stmt(&stmt, &mut errors);
         }
 
         Ok(errors)
@@ -199,10 +205,18 @@ impl Linter {
         )
     }
 
+    fn extract_string_literal(expr: &Expr) -> Option<&str> {
+        if let Expr::StringLiteral(s) = expr {
+            Some(s.value.to_str())
+        } else {
+            None
+        }
+    }
+
     fn visit_stmt(&mut self, stmt: &Stmt, errors: &mut Vec<LintError>) {
         match stmt {
             Stmt::ClassDef(class_def) => {
-                let is_schema = class_def.bases.iter().any(|base| match base {
+                let is_schema = class_def.bases().iter().any(|base| match base {
                     Expr::Attribute(attr) => Self::is_schema_base(attr.attr.as_str()),
                     Expr::Name(name) => Self::is_schema_base(name.id.as_str()),
                     _ => false,
@@ -225,15 +239,12 @@ impl Linter {
                                         if let Some(f) = func_name {
                                             if f == "Column" {
                                                 let mut alias = None;
-                                                for keyword in &call.keywords {
+                                                for keyword in call.arguments.keywords.iter() {
                                                     if keyword.arg.as_ref().map(|s| s.as_str())
                                                         == Some("alias")
                                                     {
-                                                        if let Expr::Constant(c) = &keyword.value {
-                                                            if let ast::Constant::Str(s) = &c.value
-                                                            {
-                                                                alias = Some(s.clone());
-                                                            }
+                                                        if let Some(s) = Self::extract_string_literal(&keyword.value) {
+                                                            alias = Some(s.to_string());
                                                         }
                                                     }
                                                 }
@@ -243,18 +254,14 @@ impl Linter {
                                                 col_added = true;
                                             } else if f == "ColumnSet" || f == "ColumnGroup" {
                                                 columns.push(name.id.to_string());
-                                                for keyword in &call.keywords {
+                                                for keyword in call.arguments.keywords.iter() {
                                                     if keyword.arg.as_ref().map(|s| s.as_str())
                                                         == Some("members")
                                                     {
                                                         if let Expr::List(list) = &keyword.value {
                                                             for el in &list.elts {
-                                                                if let Expr::Constant(c) = el {
-                                                                    if let ast::Constant::Str(s) =
-                                                                        &c.value
-                                                                    {
-                                                                        columns.push(s.clone());
-                                                                    }
+                                                                if let Some(s) = Self::extract_string_literal(el) {
+                                                                    columns.push(s.to_string());
                                                                 } else if let Expr::Name(n) = el {
                                                                     columns.push(n.id.to_string());
                                                                 }
@@ -285,15 +292,12 @@ impl Linter {
                                         if let Some(f) = func_name {
                                             if f == "Column" {
                                                 let mut alias = None;
-                                                for keyword in &call.keywords {
+                                                for keyword in call.arguments.keywords.iter() {
                                                     if keyword.arg.as_ref().map(|s| s.as_str())
                                                         == Some("alias")
                                                     {
-                                                        if let Expr::Constant(c) = &keyword.value {
-                                                            if let ast::Constant::Str(s) = &c.value
-                                                            {
-                                                                alias = Some(s.clone());
-                                                            }
+                                                        if let Some(s) = Self::extract_string_literal(&keyword.value) {
+                                                            alias = Some(s.to_string());
                                                         }
                                                     }
                                                 }
@@ -303,18 +307,14 @@ impl Linter {
                                                 col_added = true;
                                             } else if f == "ColumnSet" || f == "ColumnGroup" {
                                                 columns.push(name.id.to_string());
-                                                for keyword in &call.keywords {
+                                                for keyword in call.arguments.keywords.iter() {
                                                     if keyword.arg.as_ref().map(|s| s.as_str())
                                                         == Some("members")
                                                     {
                                                         if let Expr::List(list) = &keyword.value {
                                                             for el in &list.elts {
-                                                                if let Expr::Constant(c) = el {
-                                                                    if let ast::Constant::Str(s) =
-                                                                        &c.value
-                                                                    {
-                                                                        columns.push(s.clone());
-                                                                    }
+                                                                if let Some(s) = Self::extract_string_literal(el) {
+                                                                    columns.push(s.to_string());
                                                                 } else if let Expr::Name(n) = el {
                                                                     columns.push(n.id.to_string());
                                                                 }
@@ -336,14 +336,10 @@ impl Linter {
                     // Warn about column names that conflict with reserved methods
                     for col_name in &columns {
                         if RESERVED_METHODS.contains(&col_name.as_str()) {
-                            let source_location = self
-                                .line_index
-                                .as_ref()
-                                .unwrap()
-                                .source_location(class_def.range.start(), &self.source);
+                            let (line, col) = self.source_location(class_def.range().start());
                             errors.push(LintError {
-                                line: source_location.row.get() as usize,
-                                col: source_location.column.get() as usize,
+                                line,
+                                col,
                                 message: format!(
                                     "Column name '{}' in {} conflicts with a pandas/polars method. This will shadow the method when accessed via attribute syntax (df.{}). Consider renaming to '{}_value' or similar.",
                                     col_name, class_def.name, col_name, col_name
@@ -360,29 +356,23 @@ impl Linter {
                 }
             }
             Stmt::Assign(assign) => {
-                let source_location = self
-                    .line_index
-                    .as_ref()
-                    .unwrap()
-                    .source_location(assign.range.start(), &self.source);
-                let current_line = source_location.row.get() as usize;
+                let (current_line, current_col) = self.source_location(assign.range().start());
 
                 // Check for mutations: df["new_col"] = ...
                 for target in &assign.targets {
                     if let Expr::Subscript(subscript) = target {
                         if let Expr::Name(name) = &*subscript.value {
                             if let Some((schema_name, _)) = self.variables.get(name.id.as_str()) {
-                                if let Expr::Constant(c) = &*subscript.slice {
-                                    if let ast::Constant::Str(col_name) = &c.value {
-                                        if let Some(columns) = self.schemas.get_mut(schema_name) {
-                                            if !columns.contains(col_name) {
-                                                errors.push(LintError {
-                                                    line: current_line,
-                                                    col: source_location.column.get() as usize,
-                                                    message: format!("Column '{}' does not exist in {} (mutation tracking)", col_name, schema_name),
-                                                });
-                                                columns.push(col_name.clone());
-                                            }
+                                if let Some(col_name) = Self::extract_string_literal(&subscript.slice) {
+                                    let schema_name = schema_name.clone();
+                                    if let Some(columns) = self.schemas.get_mut(&schema_name) {
+                                        if !columns.iter().any(|c| c == col_name) {
+                                            errors.push(LintError {
+                                                line: current_line,
+                                                col: current_col,
+                                                message: format!("Column '{}' does not exist in {} (mutation tracking)", col_name, schema_name),
+                                            });
+                                            columns.push(col_name.to_string());
                                         }
                                     }
                                 }
@@ -403,8 +393,8 @@ impl Linter {
                                     if let Some((left_schema, _)) =
                                         self.variables.get(left_name.id.as_str())
                                     {
-                                        if !call.args.is_empty() {
-                                            if let Expr::Name(right_name) = &call.args[0] {
+                                        if !call.arguments.args.is_empty() {
+                                            if let Expr::Name(right_name) = &call.arguments.args[0] {
                                                 if let Some((right_schema, _)) =
                                                     self.variables.get(right_name.id.as_str())
                                                 {
@@ -419,8 +409,8 @@ impl Linter {
                                     }
                                 }
                             } else if func_name == "concat" {
-                                if !call.args.is_empty() {
-                                    if let Expr::List(list) = &call.args[0] {
+                                if !call.arguments.args.is_empty() {
+                                    if let Expr::List(list) = &call.arguments.args[0] {
                                         let mut schemas = Vec::new();
                                         for el in &list.elts {
                                             if let Expr::Name(n) = el {
@@ -445,8 +435,8 @@ impl Linter {
                                     let class_name = inner_attr.attr.as_str();
                                     if class_name == "PandasFrame" || class_name == "PolarsFrame" {
                                         // Find the schema argument
-                                        if call.args.len() >= 2 {
-                                            if let Expr::Name(schema_name) = &call.args[1] {
+                                        if call.arguments.args.len() >= 2 {
+                                            if let Expr::Name(schema_name) = &call.arguments.args[1] {
                                                 for target in &assign.targets {
                                                     if let Expr::Name(target_name) = target {
                                                         self.variables.insert(
@@ -475,8 +465,8 @@ impl Linter {
                         }
                         Expr::Name(name) => {
                             if name.id.as_str() == "concat" {
-                                if !call.args.is_empty() {
-                                    if let Expr::List(list) = &call.args[0] {
+                                if !call.arguments.args.is_empty() {
+                                    if let Expr::List(list) = &call.arguments.args[0] {
                                         let mut schemas = Vec::new();
                                         for el in &list.elts {
                                             if let Expr::Name(n) = el {
@@ -494,6 +484,7 @@ impl Linter {
                                         }
                                     }
                                 } else if let Some(keyword) = call
+                                    .arguments
                                     .keywords
                                     .iter()
                                     .find(|k| k.arg.as_ref().map(|s| s.as_str()) == Some("objs"))
@@ -588,12 +579,7 @@ impl Linter {
                 }
             }
             Stmt::AnnAssign(ann_assign) => {
-                let source_location = self
-                    .line_index
-                    .as_ref()
-                    .unwrap()
-                    .source_location(ann_assign.range.start(), &self.source);
-                let current_line = source_location.row.get() as usize;
+                let (current_line, _) = self.source_location(ann_assign.range().start());
 
                 if let Some(value) = &ann_assign.value {
                     if let Expr::Call(call) = &**value {
@@ -680,11 +666,9 @@ impl Linter {
                             }
                         }
                     }
-                    Expr::Constant(c) => {
+                    Expr::StringLiteral(s) => {
                         // Handle quoted type hints: df: "DataFrame[UserSchema]"
-                        if let ast::Constant::Str(s) = &c.value {
-                            self.parse_quoted_type_hint(s, ann_assign, current_line);
-                        }
+                        self.parse_quoted_type_hint(s.value.to_str(), ann_assign, current_line);
                     }
                     _ => {}
                 }
@@ -757,11 +741,7 @@ impl Linter {
                             if !columns.contains(&attr_name.to_string())
                                 && !RESERVED_METHODS.contains(&attr_name)
                             {
-                                let source_location = self
-                                    .line_index
-                                    .as_ref()
-                                    .unwrap()
-                                    .source_location(attr.range.start(), &self.source);
+                                let (line, col) = self.source_location(attr.range().start());
                                 let mut message = format!(
                                     "Column '{}' does not exist in {} (defined at line {})",
                                     attr_name, schema_name, defined_line
@@ -770,8 +750,8 @@ impl Linter {
                                     message.push_str(&format!(" (did you mean '{}'?)", suggestion));
                                 }
                                 errors.push(LintError {
-                                    line: source_location.row.get() as usize,
-                                    col: source_location.column.get() as usize,
+                                    line,
+                                    col,
                                     message,
                                 });
                             }
@@ -785,31 +765,25 @@ impl Linter {
                     if let Some((schema_name, defined_line)) = self.variables.get(name.id.as_str())
                     {
                         if let Some(columns) = self.schemas.get(schema_name) {
-                            if let Expr::Constant(c) = &*subscript.slice {
-                                if let ast::Constant::Str(col_name) = &c.value {
-                                    if !columns.contains(col_name) {
-                                        let source_location = self
-                                            .line_index
-                                            .as_ref()
-                                            .unwrap()
-                                            .source_location(subscript.range.start(), &self.source);
-                                        let mut message = format!(
-                                            "Column '{}' does not exist in {} (defined at line {})",
-                                            col_name, schema_name, defined_line
-                                        );
-                                        if let Some(suggestion) = find_best_match(col_name, columns)
-                                        {
-                                            message.push_str(&format!(
-                                                " (did you mean '{}'?)",
-                                                suggestion
-                                            ));
-                                        }
-                                        errors.push(LintError {
-                                            line: source_location.row.get() as usize,
-                                            col: source_location.column.get() as usize,
-                                            message,
-                                        });
+                            if let Some(col_name) = Self::extract_string_literal(&subscript.slice) {
+                                if !columns.iter().any(|c| c == col_name) {
+                                    let (line, col) = self.source_location(subscript.range().start());
+                                    let mut message = format!(
+                                        "Column '{}' does not exist in {} (defined at line {})",
+                                        col_name, schema_name, defined_line
+                                    );
+                                    if let Some(suggestion) = find_best_match(col_name, columns)
+                                    {
+                                        message.push_str(&format!(
+                                            " (did you mean '{}'?)",
+                                            suggestion
+                                        ));
                                     }
+                                    errors.push(LintError {
+                                        line,
+                                        col,
+                                        message,
+                                    });
                                 }
                             }
                         }
@@ -819,7 +793,7 @@ impl Linter {
                 self.visit_expr(&subscript.slice, errors);
             }
             Expr::Call(call) => {
-                for arg in &call.args {
+                for arg in call.arguments.args.iter() {
                     self.visit_expr(arg, errors);
                 }
                 self.visit_expr(&call.func, errors);

@@ -49,18 +49,18 @@ class BenchmarkResult:
     name: str
     description: str
     version: str
-    times: list[float] = field(default_factory=list)
+    times: list[int] = field(default_factory=list)
     success: bool = True
     error: str | None = None
 
     @property
     def mean(self) -> float:
-        """Mean execution time."""
+        """Mean execution time in nanoseconds."""
         return statistics.mean(self.times) if self.times else 0.0
 
     @property
     def std(self) -> float:
-        """Standard deviation."""
+        """Standard deviation in nanoseconds."""
         return statistics.stdev(self.times) if len(self.times) > 1 else 0.0
 
 
@@ -173,13 +173,13 @@ def run_benchmark(
         subprocess.run(full_cmd, capture_output=True, check=False)
 
     # Timed runs - clear cache before each to ensure fair comparison
-    times: list[float] = []
+    times: list[int] = []
     for _ in range(runs):
         if clear_cache_func:
             clear_cache_func()
-        start = time.perf_counter()
+        start = time.perf_counter_ns()
         subprocess.run(full_cmd, capture_output=True, check=False)
-        elapsed = time.perf_counter() - start
+        elapsed = time.perf_counter_ns() - start
         times.append(elapsed)
 
     return BenchmarkResult(
@@ -191,13 +191,15 @@ def run_benchmark(
     )
 
 
-def format_time(seconds: float) -> str:
-    """Format time in appropriate units."""
-    if seconds < 0.001:
-        return f"{seconds * 1000000:.0f}µs"
-    if seconds < 1:
-        return f"{seconds * 1000:.0f}ms"
-    return f"{seconds:.2f}s"
+def format_time(ns: float) -> str:
+    """Format time in appropriate units from nanoseconds."""
+    if ns < 1_000:
+        return f"{ns:.0f}ns"
+    if ns < 1_000_000:
+        return f"{ns / 1_000:.0f}µs"
+    if ns < 1_000_000_000:
+        return f"{ns / 1_000_000:.0f}ms"
+    return f"{ns / 1_000_000_000:.2f}s"
 
 
 def generate_markdown_table(results: list[BenchmarkResult], file_count: int) -> str:
@@ -273,7 +275,12 @@ def main() -> None:
 
     # Check for typedframes binary
     binary_path = (
-            project_root / "typedframes-checker" / "rust_typedframes_checker" / "target" / "release" / "typedframes_checker"
+            project_root
+            / "typedframes-checker"
+            / "rust_typedframes_checker"
+            / "target"
+            / "release"
+            / "typedframes_checker"
     )
     if not binary_path.exists():
         binary_path = (
