@@ -7,7 +7,7 @@ rather than wrapper classes for polars support.
 
 This approach:
 - Preserves full polars autocomplete and introspection
-- Allows the static linter to validate column access
+- Allows the static checker to validate column access
 - Has zero runtime overhead
 
 Usage:
@@ -49,7 +49,7 @@ class PolarsFrame:
     Annotated[pl.DataFrame, Schema], meaning the actual value is a plain
     pl.DataFrame with full polars functionality.
 
-    The typedframes linter parses the Annotated metadata to validate
+    The typedframes checker parses the Annotated metadata to validate
     column access statically.
 
     Example:
@@ -80,6 +80,90 @@ class PolarsFrame:
         import polars as pl
 
         return Annotated[pl.DataFrame, schema]
+
+    @classmethod
+    def read_csv(cls, source: Any, schema: type[SchemaT], **kwargs: Any) -> Any:  # noqa: ARG003
+        """
+        Read a CSV file into a polars DataFrame.
+
+        The schema parameter documents the expected structure and enables
+        the static checker to validate column access.
+
+        Args:
+            source: File path or buffer to read from.
+            schema: Schema class describing the expected DataFrame structure.
+            **kwargs: Additional arguments passed to ``pl.read_csv``.
+
+        Returns:
+            A polars DataFrame. Annotate the result as ``PolarsFrame[Schema]``.
+
+        """
+        import polars as pl
+
+        return pl.read_csv(source, **kwargs)
+
+    @classmethod
+    def read_parquet(cls, source: Any, schema: type[SchemaT], **kwargs: Any) -> Any:  # noqa: ARG003
+        """
+        Read a Parquet file into a polars DataFrame.
+
+        The schema parameter documents the expected structure and enables
+        the static checker to validate column access.
+
+        Args:
+            source: File path or buffer to read from.
+            schema: Schema class describing the expected DataFrame structure.
+            **kwargs: Additional arguments passed to ``pl.read_parquet``.
+
+        Returns:
+            A polars DataFrame. Annotate the result as ``PolarsFrame[Schema]``.
+
+        """
+        import polars as pl
+
+        return pl.read_parquet(source, **kwargs)
+
+    @classmethod
+    def read_json(cls, source: Any, schema: type[SchemaT], **kwargs: Any) -> Any:  # noqa: ARG003
+        """
+        Read a JSON file into a polars DataFrame.
+
+        The schema parameter documents the expected structure and enables
+        the static checker to validate column access.
+
+        Args:
+            source: File path or buffer to read from.
+            schema: Schema class describing the expected DataFrame structure.
+            **kwargs: Additional arguments passed to ``pl.read_json``.
+
+        Returns:
+            A polars DataFrame. Annotate the result as ``PolarsFrame[Schema]``.
+
+        """
+        import polars as pl
+
+        return pl.read_json(source, **kwargs)
+
+    @classmethod
+    def read_excel(cls, source: Any, schema: type[SchemaT], **kwargs: Any) -> Any:  # noqa: ARG003
+        """
+        Read an Excel file into a polars DataFrame.
+
+        The schema parameter documents the expected structure and enables
+        the static checker to validate column access.
+
+        Args:
+            source: File path or buffer to read from.
+            schema: Schema class describing the expected DataFrame structure.
+            **kwargs: Additional arguments passed to ``pl.read_excel``.
+
+        Returns:
+            A polars DataFrame. Annotate the result as ``PolarsFrame[Schema]``.
+
+        """
+        import polars as pl
+
+        return pl.read_excel(source, **kwargs)
 
 
 __all__ = ["PolarsFrame"]

@@ -3,7 +3,7 @@
 ## Package Structure
 
 - `typedframes` (core): Pure Python schemas, columns, frames — no Rust, no mypy
-- `typedframes-lint` (workspace member): Rust binary + mypy plugin
+- `typedframes-checker` (workspace member): Rust binary + mypy plugin
 - Optional deps: `typedframes[pandas]`, `typedframes[polars]`
 - Import pattern: `from typedframes.pandas import PandasFrame`, `from typedframes.polars import PolarsFrame`
 
@@ -29,7 +29,7 @@
 
 ## Commands
 
-- `uv run inv build` - Build Rust linter in `typedframes-lint/` (if source changed)
+- `uv run inv build` - Build Rust checker in `typedframes-checker/` (if source changed)
 - `uv run inv test` - Tests with coverage (auto-builds)
 - `uv run inv lint` - All linters
 - `uv run inv all` - Full check suite
@@ -38,6 +38,10 @@
 ## Instruction File Sync
 
 - When updating this file (`.github/copilot-instructions.md`), also apply the same changes to `CLAUDE.md`
+
+## Git Policy
+
+- Never run git commands (commit, stash, push, checkout, etc.) without explicit user request
 
 ## Documentation Policy
 - Never add future work or roadmap items without user approval

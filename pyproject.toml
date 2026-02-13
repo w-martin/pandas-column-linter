@@ -15,15 +15,15 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
-pandas = ["pandas>=3.0.0"]
+pandas = ["pandas>=2.3.3"]
 pandera = ["pandera>=0.22.0"]
 polars = ["polars>=1.37.1"]
 
 [tool.uv.workspace]
-members = ["typedframes-lint"]
+members = ["typedframes-checker"]
 
 [tool.uv.sources]
-typedframes-lint = { workspace = true }
+typedframes-checker = { workspace = true }
 
 [tool.pytest.ini_options]
 addopts = "--cov=. --cov-report=term-missing --cov-report=json --cov-branch -n auto"
@@ -40,7 +40,7 @@ omit = [
 
 [tool.mypy]
 mypy_path = "src"
-plugins = ["typedframes_lint.mypy"]
+plugins = ["typedframes_checker.mypy"]
 ignore_missing_imports = true
 
 [tool.ruff]
@@ -70,7 +70,7 @@ ignore = [
 "tests/fixtures/*" = ["T201"]
 "examples/*" = ["T201", "INP001"]
 "tasks.py" = ["T201"]
-"typedframes-lint/src/typedframes_lint/mypy.py" = ["S603"]
+"typedframes-checker/src/typedframes_checker/mypy.py" = ["S603"]
 "benchmarks/*" = ["T201", "S603", "S607", "PLR2004", "PLR0912", "PLR0913", "TRY300"]
 
 [tool.ruff.lint.mccabe]
@@ -81,23 +81,28 @@ convention = "google"
 
 [dependency-groups]
 dev = [
-    "typedframes-lint",
+    "typedframes-checker",
     "pandas>=3.0.0",
-    "pandera>=0.22.0",
-    "polars>=1.37.1",
-    "bandit>=1.7.0",
-    "complexipy>=0.7.0",
+    "pandera>=0.29.0",
+    "polars>=1.38.1",
+    "bandit>=1.9.3",
+    "complexipy>=5.2.0",
     "coverage-threshold>=0.6.2",
-    "invoke>=2.2.0",
-    "licensecheck>=2024.0.0",
+    "invoke>=2.2.1",
+    "licensecheck>=2025.1.0",
     "maturin>=1.11.5",
-    "pre-commit>=3.7.0",
-    "pyrefly>=0.51.1",
+    "pre-commit>=4.5.1",
+    "pyrefly>=0.52.0",
     "pyright>=1.1.408",
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",
-    "pytest-xdist>=3.5.0",
-    "ruff>=0.14.13",
+    "pytest-xdist>=3.8.0",
+    "ruff>=0.15.0",
+    "ty>=0.0.16",
+    "openpyxl>=3.1.5",
+    "pyarrow>=23.0.0",
+    "xlsxwriter>=3.2.9",
+    "fastexcel>=0.19.0",
 ]
 
 [tool.bandit]
@@ -132,6 +137,7 @@ include = ["examples/*.py"]
 [tool.ty.overrides.rules]
 unused-ignore-comment = "ignore"
 invalid-type-form = "ignore"
+invalid-argument-type = "ignore"
 
 [[tool.ty.overrides]]
 include = ["benchmarks/**/*.py"]
@@ -142,4 +148,4 @@ no-matching-overload = "ignore"
 [tool.licensecheck]
 using = "PEP631"
 groups = ["dev"]
-ignore_packages = ["mypy-extensions", "typedframes", "typedframes-lint", "pyrefly"]
+ignore_packages = ["mypy-extensions", "typedframes", "typedframes-checker", "pyrefly"]

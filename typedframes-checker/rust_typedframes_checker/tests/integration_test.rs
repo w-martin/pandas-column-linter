@@ -1,4 +1,4 @@
-use _rust_linter::Linter;
+use _rust_checker::Linter;
 use std::fs;
 use tempfile::tempdir;
 

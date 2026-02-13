@@ -63,6 +63,22 @@ class TestBaseSchema(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertIn("all_user", result)
 
+    def test_should_return_cached_column_groups(self) -> None:
+        """Test that column_groups() returns cached results on second call."""
+
+        # arrange
+        class TestSchema(BaseSchema):
+            user_id = Column(type=int)
+            email = Column(type=str)
+            all_user = ColumnGroup(members=[user_id, email])
+
+        # act
+        first = TestSchema.column_groups()
+        second = TestSchema.column_groups()
+
+        # assert
+        self.assertIs(first, second)
+
     def test_should_return_all_column_names(self) -> None:
         """Test that all_column_names() returns column names including aliases."""
 

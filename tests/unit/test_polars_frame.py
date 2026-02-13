@@ -1,6 +1,8 @@
 """Unit tests for Polars integration with typedframes."""
 
+import tempfile
 import unittest
+from pathlib import Path
 from typing import Annotated
 
 import polars as pl
@@ -168,3 +170,74 @@ class TestPolarsFrame(unittest.TestCase):
 
         # assert
         self.assertIsNotNone(result)
+
+    def test_should_read_csv(self) -> None:
+        """Test that read_csv returns a polars DataFrame."""
+        # arrange
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
+            f.write("user_id,email_address\n1,a@b.com\n2,c@d.com\n")
+            csv_path = f.name
+
+        # act
+        result = PolarsFrame.read_csv(csv_path, UserSchema)
+
+        # assert
+        self.assertIsInstance(result, pl.DataFrame)
+        self.assertEqual(result["user_id"].to_list(), [1, 2])
+
+        # cleanup
+        Path(csv_path).unlink()
+
+    def test_should_read_json(self) -> None:
+        """Test that read_json returns a polars DataFrame."""
+        # arrange
+        raw_df = pl.DataFrame({"user_id": [1, 2], "email_address": ["a@b.com", "c@d.com"]})
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            raw_df.write_json(f.name)
+            json_path = f.name
+
+        # act
+        result = PolarsFrame.read_json(json_path, UserSchema)
+
+        # assert
+        self.assertIsInstance(result, pl.DataFrame)
+        self.assertEqual(result["user_id"].to_list(), [1, 2])
+
+        # cleanup
+        Path(json_path).unlink()
+
+    def test_should_read_parquet(self) -> None:
+        """Test that read_parquet returns a polars DataFrame."""
+        # arrange
+        raw_df = pl.DataFrame({"user_id": [1, 2], "email_address": ["a@b.com", "c@d.com"]})
+        with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as f:
+            raw_df.write_parquet(f.name)
+            parquet_path = f.name
+
+        # act
+        result = PolarsFrame.read_parquet(parquet_path, UserSchema)
+
+        # assert
+        self.assertIsInstance(result, pl.DataFrame)
+        self.assertEqual(result["user_id"].to_list(), [1, 2])
+
+        # cleanup
+        Path(parquet_path).unlink()
+
+    def test_should_read_excel(self) -> None:
+        """Test that read_excel returns a polars DataFrame."""
+        # arrange
+        raw_df = pl.DataFrame({"user_id": [1, 2], "email_address": ["a@b.com", "c@d.com"]})
+        with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
+            raw_df.write_excel(f.name)
+            excel_path = f.name
+
+        # act
+        result = PolarsFrame.read_excel(excel_path, UserSchema)
+
+        # assert
+        self.assertIsInstance(result, pl.DataFrame)
+        self.assertEqual(result["user_id"].to_list(), [1, 2])
+
+        # cleanup
+        Path(excel_path).unlink()

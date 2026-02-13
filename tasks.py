@@ -4,8 +4,8 @@ from pathlib import Path
 
 from invoke import Context, task
 
-RUST_DIR = Path("typedframes-lint/rust_typedframes_linter")
-BINARY_PATH = RUST_DIR / "target" / "debug" / "typedframes_linter"
+RUST_DIR = Path("typedframes-checker/rust_typedframes_checker")
+BINARY_PATH = RUST_DIR / "target" / "debug" / "typedframes_checker"
 
 
 def _needs_build() -> bool:
@@ -26,12 +26,12 @@ def _needs_build() -> bool:
 
 @task
 def build(ctx: Context, *, force: bool = False) -> None:
-    """Build the Rust linter binary if needed."""
+    """Build the Rust checker binary if needed."""
     if force or _needs_build():
-        print("Building Rust linter...")
+        print("Building Rust checker...")
         ctx.run(f"cd {RUST_DIR} && cargo build")
     else:
-        print("Rust linter is up to date.")
+        print("Rust checker is up to date.")
 
 
 @task(name="format")
@@ -58,7 +58,7 @@ def lint_fix(ctx: Context) -> None:
 
 @task(pre=[build])
 def test(ctx: Context) -> None:
-    """Run pytest with branch coverage. Builds Rust linter if needed."""
+    """Run pytest with branch coverage. Builds Rust checker if needed."""
     ctx.run("python -m pytest tests/")
     ctx.run("coverage-threshold")
 

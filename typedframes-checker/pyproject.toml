@@ -3,9 +3,9 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "typedframes-lint"
+name = "typedframes-checker"
 version = "0.1.0"
-description = "Rust linter + mypy plugin for typedframes"
+description = "Rust checker + mypy plugin for typedframes"
 requires-python = ">=3.11"
 dependencies = ["typedframes", "mypy"]
 
@@ -14,6 +14,6 @@ typedframes = { workspace = true }
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
-manifest-path = "rust_typedframes_linter/Cargo.toml"
+manifest-path = "rust_typedframes_checker/Cargo.toml"
 python-source = "src"
-module-name = "typedframes_lint._rust_linter"
+module-name = "typedframes_checker._rust_checker"

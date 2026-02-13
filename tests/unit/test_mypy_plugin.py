@@ -7,8 +7,8 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from mypy.options import Options
-from typedframes_lint.mypy import LinterNotFoundError, plugin
-from typedframes_lint.mypy import TypedFramesPlugin as PandasLinterPlugin
+from typedframes_checker.mypy import CheckerNotFoundError, plugin
+from typedframes_checker.mypy import TypedFramesPlugin as PandasLinterPlugin
 
 
 class TestPandasLinterPluginUnit(unittest.TestCase):
@@ -27,9 +27,9 @@ class TestPandasLinterPluginUnit(unittest.TestCase):
         mock_check_file = MagicMock(return_value=json.dumps(self.error_data))
 
         with (
-            patch("typedframes_lint.mypy.get_project_root") as mock_root,
-            patch("typedframes_lint.mypy.is_enabled") as mock_enabled,
-            patch.dict(sys.modules, {"typedframes_lint._rust_linter": MagicMock(check_file=mock_check_file)}),
+            patch("typedframes_checker.mypy.get_project_root") as mock_root,
+            patch("typedframes_checker.mypy.is_enabled") as mock_enabled,
+            patch.dict(sys.modules, {"typedframes_checker._rust_checker": MagicMock(check_file=mock_check_file)}),
         ):
             mock_enabled.return_value = True
             mock_root.return_value = Path()
@@ -52,9 +52,9 @@ class TestPandasLinterPluginUnit(unittest.TestCase):
         mock_check_file_empty = MagicMock(return_value=json.dumps([]))
 
         with (
-            patch("typedframes_lint.mypy.get_project_root") as mock_root,
-            patch("typedframes_lint.mypy.is_enabled") as mock_enabled,
-            patch.dict(sys.modules, {"typedframes_lint._rust_linter": MagicMock(check_file=mock_check_file_empty)}),
+            patch("typedframes_checker.mypy.get_project_root") as mock_root,
+            patch("typedframes_checker.mypy.is_enabled") as mock_enabled,
+            patch.dict(sys.modules, {"typedframes_checker._rust_checker": MagicMock(check_file=mock_check_file_empty)}),
         ):
             mock_enabled.return_value = True
             mock_root.return_value = Path()
@@ -76,9 +76,9 @@ class TestPandasLinterPluginUnit(unittest.TestCase):
         mock_check_file = MagicMock(return_value=json.dumps(self.error_data))
 
         with (
-            patch("typedframes_lint.mypy.get_project_root") as mock_root,
-            patch("typedframes_lint.mypy.is_enabled") as mock_enabled,
-            patch.dict(sys.modules, {"typedframes_lint._rust_linter": MagicMock(check_file=mock_check_file)}),
+            patch("typedframes_checker.mypy.get_project_root") as mock_root,
+            patch("typedframes_checker.mypy.is_enabled") as mock_enabled,
+            patch.dict(sys.modules, {"typedframes_checker._rust_checker": MagicMock(check_file=mock_check_file)}),
         ):
             mock_enabled.return_value = True
             mock_root.return_value = Path()
@@ -110,24 +110,24 @@ class TestPandasLinterPluginUnit(unittest.TestCase):
         self.assertEqual(result, context.default_return_type)
 
     def test_should_not_run_when_disabled(self) -> None:
-        """Test that linter does not run when disabled in config."""
+        """Test that checker does not run when disabled in config."""
         # arrange
-        with patch("typedframes_lint.mypy.is_enabled") as mock_enabled:
+        with patch("typedframes_checker.mypy.is_enabled") as mock_enabled:
             mock_enabled.return_value = False
 
             # act
-            errors = self.plugin._run_linter(self.test_file)
+            errors = self.plugin._run_checker(self.test_file)
 
             # assert
             self.assertEqual(errors, [])
 
     def test_should_return_cached_results(self) -> None:
-        """Test that cached results are returned for previously linted files."""
+        """Test that cached results are returned for previously checked files."""
         # arrange
-        self.plugin._linter_results[self.test_file] = self.error_data
+        self.plugin._checker_results[self.test_file] = self.error_data
 
         # act
-        errors = self.plugin._run_linter(self.test_file)
+        errors = self.plugin._run_checker(self.test_file)
 
         # assert
         self.assertEqual(errors, self.error_data)
@@ -135,29 +135,29 @@ class TestPandasLinterPluginUnit(unittest.TestCase):
     def test_should_return_empty_for_ignored_paths(self) -> None:
         """Test that ignored paths return empty results."""
         # arrange/act/assert
-        self.assertEqual(self.plugin._run_linter(""), [])
-        self.assertEqual(self.plugin._run_linter("site-packages/foo.py"), [])
-        self.assertEqual(self.plugin._run_linter("foo.pyi"), [])
+        self.assertEqual(self.plugin._run_checker(""), [])
+        self.assertEqual(self.plugin._run_checker("site-packages/foo.py"), [])
+        self.assertEqual(self.plugin._run_checker("foo.pyi"), [])
 
     def test_should_raise_error_when_extension_not_found(self) -> None:
-        """Test that LinterNotFoundError is raised when extension cannot be imported."""
+        """Test that CheckerNotFoundError is raised when extension cannot be imported."""
         # arrange
         new_plugin = PandasLinterPlugin(Options())
 
         with (
-            patch("typedframes_lint.mypy.get_project_root") as mock_root,
-            patch("typedframes_lint.mypy.is_enabled") as mock_enabled,
+            patch("typedframes_checker.mypy.get_project_root") as mock_root,
+            patch("typedframes_checker.mypy.is_enabled") as mock_enabled,
         ):
             mock_enabled.return_value = True
             mock_root.return_value = Path()
 
-            # Remove the rust linter from modules to simulate import failure
-            with patch.dict(sys.modules, {"typedframes_lint._rust_linter": None}):
+            # Remove the rust checker from modules to simulate import failure
+            with patch.dict(sys.modules, {"typedframes_checker._rust_checker": None}):
                 # act/assert
-                with self.assertRaises(LinterNotFoundError) as ctx:
-                    new_plugin._run_linter(self.test_file)
+                with self.assertRaises(CheckerNotFoundError) as ctx:
+                    new_plugin._run_checker(self.test_file)
 
-                self.assertIn("typedframes linter extension not found", str(ctx.exception))
+                self.assertIn("typedframes checker extension not found", str(ctx.exception))
 
     def test_should_not_report_error_when_line_is_far_from_errors(self) -> None:
         """Test that no error is reported when access line is far from all error lines."""
@@ -167,9 +167,9 @@ class TestPandasLinterPluginUnit(unittest.TestCase):
         new_plugin = PandasLinterPlugin(Options())
 
         with (
-            patch("typedframes_lint.mypy.get_project_root") as mock_root,
-            patch("typedframes_lint.mypy.is_enabled") as mock_enabled,
-            patch.dict(sys.modules, {"typedframes_lint._rust_linter": MagicMock(check_file=mock_check_file)}),
+            patch("typedframes_checker.mypy.get_project_root") as mock_root,
+            patch("typedframes_checker.mypy.is_enabled") as mock_enabled,
+            patch.dict(sys.modules, {"typedframes_checker._rust_checker": MagicMock(check_file=mock_check_file)}),
         ):
             mock_enabled.return_value = True
             mock_root.return_value = Path()

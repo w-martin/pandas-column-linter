@@ -1,6 +1,5 @@
 # Rust
 /target
-/rust_typedframes_linter/target
 Cargo.lock
 **/*.rs.bk
 

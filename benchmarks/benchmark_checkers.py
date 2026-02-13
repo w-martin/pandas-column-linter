@@ -97,7 +97,7 @@ def get_tool_version(cmd: list[str], tool_name_override: str | None = None) -> s
                 check=False,
             )
             version = result.stdout.strip()
-            return version if version else "0.1.0"
+            return version or "0.1.0"
         except (subprocess.TimeoutExpired, FileNotFoundError):
             return "0.1.0"
 
@@ -272,9 +272,18 @@ def main() -> None:
     file_count = count_python_files(project_root / "src")
 
     # Check for typedframes binary
-    binary_path = project_root / "rust_typedframes_linter" / "target" / "release" / "typedframes_linter"
+    binary_path = (
+            project_root / "typedframes-checker" / "rust_typedframes_checker" / "target" / "release" / "typedframes_checker"
+    )
     if not binary_path.exists():
-        binary_path = project_root / "rust_typedframes_linter" / "target" / "debug" / "typedframes_linter"
+        binary_path = (
+                project_root
+                / "typedframes-checker"
+                / "rust_typedframes_checker"
+                / "target"
+                / "debug"
+                / "typedframes_checker"
+        )
 
     print(f"Benchmarking type checkers on: {target}")
     print(f"Python files: {file_count}")
@@ -317,7 +326,7 @@ def main() -> None:
         print(f"Running {tool.name}...", end=" ", flush=True)
 
         # Use example file for binary, src/ for others
-        if "typedframes_linter" in str(tool.cmd[0]):
+        if "typedframes_checker" in str(tool.cmd[0]):
             bench_target = str(project_root / "examples" / "typedframes_example.py")
         else:
             bench_target = target

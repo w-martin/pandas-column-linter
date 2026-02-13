@@ -1,4 +1,4 @@
-"""Mypy plugin for typedframes column linting."""
+"""Mypy plugin for typedframes column checking."""
 
 import json
 import tomllib
@@ -24,7 +24,7 @@ def get_project_root(start_path: Path) -> Path:
 
 
 def is_enabled(project_root: Path) -> bool:
-    """Check if the linter is enabled in pyproject.toml."""
+    """Check if the checker is enabled in pyproject.toml."""
     config_path = project_root / "pyproject.toml"
     if not config_path.exists():
         return True
@@ -37,29 +37,29 @@ def is_enabled(project_root: Path) -> bool:
         return True
 
 
-class LinterNotFoundError(Exception):
-    """Raised when the typedframes linter cannot be found or executed."""
+class CheckerNotFoundError(Exception):
+    """Raised when the typedframes checker cannot be found or executed."""
 
 
 class TypedFramesPlugin(Plugin):
-    """Mypy plugin to integrate the typedframes Rust linter."""
+    """Mypy plugin to integrate the typedframes Rust checker."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         """Initialize the plugin."""
         super().__init__(*args, **kwargs)
-        self._linter_results: dict[str, list[dict[str, Any]]] = {}
+        self._checker_results: dict[str, list[dict[str, Any]]] = {}
 
     def _run_via_extension(self, file_path: str) -> list[dict[str, Any]]:
-        """Run the linter via the Rust extension module."""
-        from typedframes_lint._rust_linter import check_file  # ty: ignore[unresolved-import]
+        """Run the checker via the Rust extension module."""
+        from typedframes_checker._rust_checker import check_file  # ty: ignore[unresolved-import]
 
         result_json = str(check_file(file_path))
         return json.loads(result_json)
 
-    def _run_linter(self, file_path: str) -> list[dict[str, Any]]:
-        """Run the Rust linter on the given file."""
-        if file_path in self._linter_results:
-            return self._linter_results[file_path]
+    def _run_checker(self, file_path: str) -> list[dict[str, Any]]:
+        """Run the Rust checker on the given file."""
+        if file_path in self._checker_results:
+            return self._checker_results[file_path]
 
         if not file_path or "site-packages" in file_path or file_path.endswith(".pyi"):
             return []
@@ -72,13 +72,13 @@ class TypedFramesPlugin(Plugin):
             errors = self._run_via_extension(file_path)
         except ImportError as e:
             msg = (
-                "typedframes linter extension not found. "
+                "typedframes checker extension not found. "
                 "Ensure the package is properly installed with 'uv add typedframes' "
                 "or build from source with 'uv run maturin develop'."
             )
-            raise LinterNotFoundError(msg) from e
+            raise CheckerNotFoundError(msg) from e
 
-        self._linter_results[file_path] = errors
+        self._checker_results[file_path] = errors
         return errors
 
     def get_method_hook(
@@ -97,7 +97,7 @@ class TypedFramesPlugin(Plugin):
         if not file_path:
             return context.default_return_type
 
-        errors = self._run_linter(file_path)
+        errors = self._run_checker(file_path)
         line = context.context.line
 
         matched = False
@@ -115,8 +115,9 @@ class TypedFramesPlugin(Plugin):
         return context.default_return_type
 
 
-# Keep old name for backwards compatibility
+# Keep old names for backwards compatibility
 PandasLinterPlugin = TypedFramesPlugin
+LinterNotFoundError = CheckerNotFoundError
 
 
 def plugin(version: str) -> type[TypedFramesPlugin]:  # noqa: ARG001

@@ -28,7 +28,7 @@ fn check_file(file_path: String) -> PyResult<String> {
 }
 
 #[pymodule]
-fn _rust_linter(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _rust_checker(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(check_file, m)?)?;
     Ok(())
 }
@@ -438,7 +438,7 @@ impl Linter {
                                         }
                                     }
                                 }
-                            } else if func_name == "from_schema" || func_name == "from_pandas" || func_name == "from_polars" {
+                            } else if func_name == "from_schema" || func_name == "from_pandas" || func_name == "from_polars" || func_name == "read_csv" || func_name == "read_parquet" || func_name == "read_json" || func_name == "read_excel" {
                                 // PandasFrame.from_schema(df, Schema) or Schema.from_pandas(df)
                                 if let Expr::Attribute(inner_attr) = &*attr.value {
                                     // This is like PandasFrame.from_schema

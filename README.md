@@ -87,11 +87,10 @@ class SalesData(BaseSchema):
 ### Use With Pandas
 
 ```python
-import pandas as pd
 from typedframes.pandas import PandasFrame
 
-# Load data with schema
-df = PandasFrame.from_schema(pd.read_csv("sales.csv"), SalesData)
+# Load data with schema — one line
+df = PandasFrame.read_csv("sales.csv", SalesData)
 
 # Access columns via schema descriptors
 print(df[SalesData.revenue].sum())
@@ -113,10 +112,9 @@ grouped = df.groupby('customer_id')['revenue'].sum()
 
 ```python
 from typedframes.polars import PolarsFrame
-import polars as pl
 
-# Same schema, different backend
-df: PolarsFrame[SalesData] = pl.read_csv("sales.csv")
+# Load data with schema — one line
+df = PolarsFrame.read_csv("sales.csv", SalesData)
 
 # Use schema column references for type-safe expressions
 print(df.select(SalesData.revenue.col).sum())
@@ -182,11 +180,11 @@ typedframes check src/ --json
 ```shell
 # Add to pyproject.toml
 [tool.mypy]
-plugins = ["typedframes_lint.mypy"]
+plugins = ["typedframes_checker.mypy"]
 
 # Or mypy.ini
 [mypy]
-plugins = typedframes_lint.mypy
+plugins = typedframes_checker.mypy
 
 # Run mypy
 mypy src/
@@ -229,6 +227,9 @@ than mypy/pyright.
 The typedframes binary performs lexical column name resolution within a single file. It does not perform cross-file type
 inference. Full type checkers (mypy, pyright, ty) analyze all Python types across your entire codebase. Use both: the
 binary for fast iteration, mypy for comprehensive checking.
+
+The standalone checker is built with [`rustpython-parser`](https://crates.io/crates/rustpython-parser) for Python AST
+parsing.
 
 **Note:** ty (Astral) does not currently support mypy plugins, so use the standalone binary for column checking with ty.
 
@@ -340,7 +341,6 @@ typedframes uses **explicit backend types** to ensure complete type safety:
 from typedframes import BaseSchema, Column
 from typedframes.pandas import PandasFrame
 from typedframes.polars import PolarsFrame
-import pandas as pd
 import polars as pl
 
 
@@ -360,8 +360,8 @@ def polars_analyze(df: PolarsFrame[UserData]) -> PolarsFrame[UserData]:
 
 
 # Type checker prevents mixing backends
-df_pandas = PandasFrame.from_schema(pd.read_csv("data.csv"), UserData)
-df_polars: PolarsFrame[UserData] = pl.read_csv("data.csv")
+df_pandas = PandasFrame.read_csv("data.csv", UserData)
+df_polars = PolarsFrame.read_csv("data.csv", UserData)
 
 pandas_analyze(df_pandas)  # ✓ OK
 polars_analyze(df_polars)  # ✓ OK
@@ -390,10 +390,9 @@ class TimeSeriesData(BaseSchema):
 ### Beautiful Runtime API
 
 ```python
-import pandas as pd
 from typedframes.pandas import PandasFrame
 
-df = PandasFrame.from_schema(pd.read_csv("sensors.csv"), TimeSeriesData)
+df = PandasFrame.read_csv("sensors.csv", TimeSeriesData)
 
 # Access column groups as DataFrames
 temps = df[TimeSeriesData.temperature]  # All temp_sensor_* columns
@@ -439,10 +438,10 @@ class SensorReadings(BaseSchema):
     sensors = ColumnSet(type=float, members=r"sensor_\d+", regex=True)
 
 # Works regardless of how many sensor columns exist
-df = PandasFrame.from_schema(pd.read_csv("readings_2024_01.csv"), SensorReadings)  # 50 sensors
+df = PandasFrame.read_csv("readings_2024_01.csv", SensorReadings)  # 50 sensors
 df[SensorReadings.sensors].mean()  # All sensor columns
 
-df = PandasFrame.from_schema(pd.read_csv("readings_2024_02.csv"), SensorReadings)  # 75 sensors
+df = PandasFrame.read_csv("readings_2024_02.csv", SensorReadings)  # 75 sensors
 df[SensorReadings.sensors].mean()  # All sensor columns (different count, same code)
 ```
 
@@ -611,7 +610,6 @@ The conversion maps:
 ```python
 from typedframes import BaseSchema, Column
 from typedframes.pandas import PandasFrame
-import pandas as pd
 
 
 class Orders(BaseSchema):
@@ -625,7 +623,7 @@ def calculate_revenue(orders: PandasFrame[Orders]) -> float:
     return orders['total'].sum()
 
 
-df = PandasFrame.from_schema(pd.read_csv("orders.csv"), Orders)
+df = PandasFrame.read_csv("orders.csv", Orders)
 revenue = calculate_revenue(df)
 ```
 
@@ -634,7 +632,6 @@ revenue = calculate_revenue(df)
 ```python
 from typedframes import BaseSchema, Column, ColumnSet, ColumnGroup
 from typedframes.pandas import PandasFrame
-import pandas as pd
 
 
 class SensorData(BaseSchema):
@@ -645,7 +642,7 @@ class SensorData(BaseSchema):
     all_sensors = ColumnGroup(members=[temperature, humidity])
 
 
-df = PandasFrame.from_schema(pd.read_csv("sensors.csv"), SensorData)
+df = PandasFrame.read_csv("sensors.csv", SensorData)
 
 # Clean, type-safe operations
 avg_temp_per_row = df[SensorData.temperature].mean(axis=1)
@@ -657,7 +654,6 @@ all_readings_stats = df[SensorData.all_sensors].describe()
 ```python
 from typedframes import BaseSchema, Column
 from typedframes.pandas import PandasFrame
-import pandas as pd
 
 
 class RawSales(BaseSchema):
@@ -684,7 +680,7 @@ def aggregate_daily(df: PandasFrame[RawSales]) -> PandasFrame[AggregatedSales]:
 
 
 # Type-safe pipeline
-raw = PandasFrame.from_schema(pd.read_csv("sales.csv"), RawSales)
+raw = PandasFrame.read_csv("sales.csv", RawSales)
 aggregated = aggregate_daily(raw)
 
 
@@ -717,7 +713,7 @@ def efficient_aggregation(df: PolarsFrame[LargeDataset]) -> pl.DataFrame:
 
 
 # Polars handles large files efficiently
-df: PolarsFrame[LargeDataset] = pl.read_csv("huge_file.csv")
+df = PolarsFrame.read_csv("huge_file.csv", LargeDataset)
 result = efficient_aggregation(df)
 ```
 

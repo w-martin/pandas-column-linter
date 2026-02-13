@@ -72,7 +72,7 @@ def polars_example() -> None:
     print(df["user_id_typo"])
 
     # Mutation tracking: adding a column that's not in the schema
-    # (In standard pandas this is allowed, but typedframes linter can flag it)
+    # (In standard pandas this is allowed, but typedframes checker can flag it)
     df["new_column"] = 123
 
 

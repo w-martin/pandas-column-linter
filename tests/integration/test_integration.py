@@ -1,19 +1,19 @@
-"""Integration tests for typedframes linter."""
+"""Integration tests for typedframes checker."""
 
 import subprocess
 import unittest
 from pathlib import Path
 
-from typedframes_lint._rust_linter import check_file  # ty: ignore[unresolved-import]
+from typedframes_checker._rust_checker import check_file  # ty: ignore[unresolved-import]
 
 
-class TestTypedFramesLinterIntegration(unittest.TestCase):
-    """Integration tests for the Rust linter."""
+class TestTypedFramesCheckerIntegration(unittest.TestCase):
+    """Integration tests for the Rust checker."""
 
     def test_should_detect_missing_column(self) -> None:
-        """Test that the linter detects missing columns."""
+        """Test that the checker detects missing columns."""
         # arrange
-        sut = Path("typedframes-lint/rust_typedframes_linter/target/debug/typedframes_linter").absolute()
+        sut = Path("typedframes-checker/rust_typedframes_checker/target/debug/typedframes_checker").absolute()
         example_file = Path("examples/typedframes_example.py").absolute()
 
         # act
@@ -28,9 +28,9 @@ class TestTypedFramesLinterIntegration(unittest.TestCase):
         self.assertIn("Column 'wrong_column' does not exist", result.stdout)
 
     def test_should_suggest_typo_correction(self) -> None:
-        """Test that the linter suggests corrections for typos."""
+        """Test that the checker suggests corrections for typos."""
         # arrange
-        sut = Path("typedframes-lint/rust_typedframes_linter/target/debug/typedframes_linter").absolute()
+        sut = Path("typedframes-checker/rust_typedframes_checker/target/debug/typedframes_checker").absolute()
         example_file = Path("examples/typedframes_example.py").absolute()
 
         # act
@@ -45,9 +45,9 @@ class TestTypedFramesLinterIntegration(unittest.TestCase):
         self.assertIn("did you mean 'user_id'?", result.stdout)
 
     def test_should_track_mutations(self) -> None:
-        """Test that the linter tracks column mutations."""
+        """Test that the checker tracks column mutations."""
         # arrange
-        sut = Path("typedframes-lint/rust_typedframes_linter/target/debug/typedframes_linter").absolute()
+        sut = Path("typedframes-checker/rust_typedframes_checker/target/debug/typedframes_checker").absolute()
         example_file = Path("examples/typedframes_example.py").absolute()
 
         # act
@@ -62,7 +62,7 @@ class TestTypedFramesLinterIntegration(unittest.TestCase):
         self.assertIn("mutation tracking", result.stdout)
 
     def test_should_run_via_python_extension(self) -> None:
-        """Test that the Rust linter works via Python extension."""
+        """Test that the Rust checker works via Python extension."""
         # arrange
         example_file = str(Path("examples/typedframes_example.py").absolute())
 
@@ -74,7 +74,7 @@ class TestTypedFramesLinterIntegration(unittest.TestCase):
         self.assertIn("does not exist", result)
 
     def test_should_warn_about_reserved_method_names(self) -> None:
-        """Test that the linter warns about column names that shadow pandas/polars methods."""
+        """Test that the checker warns about column names that shadow pandas/polars methods."""
         # arrange
         import json
         import tempfile

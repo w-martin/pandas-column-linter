@@ -90,7 +90,72 @@ class PandasFrame(pd.DataFrame, Generic[SchemaT]):
 
         return cls(df, schema=schema, column_consumed_map=column_consumed_map)
 
+    @classmethod
+    def read_csv(cls, filepath_or_buffer: Any, schema: type[SchemaT], **kwargs: Any) -> PandasFrame[SchemaT]:
+        """
+        Read a CSV file and create a schema-aware PandasFrame.
+
+        Args:
+            filepath_or_buffer: File path or buffer to read from.
+            schema: Schema class to associate with the DataFrame.
+            **kwargs: Additional arguments passed to ``pd.read_csv``.
+
+        Returns:
+            PandasFrame with schema metadata.
+
+        """
+        return cls.from_schema(pd.read_csv(filepath_or_buffer, **kwargs), schema)
+
+    @classmethod
+    def read_parquet(cls, path: Any, schema: type[SchemaT], **kwargs: Any) -> PandasFrame[SchemaT]:
+        """
+        Read a Parquet file and create a schema-aware PandasFrame.
+
+        Args:
+            path: File path to read from.
+            schema: Schema class to associate with the DataFrame.
+            **kwargs: Additional arguments passed to ``pd.read_parquet``.
+
+        Returns:
+            PandasFrame with schema metadata.
+
+        """
+        return cls.from_schema(pd.read_parquet(path, **kwargs), schema)
+
+    @classmethod
+    def read_json(cls, path_or_buf: Any, schema: type[SchemaT], **kwargs: Any) -> PandasFrame[SchemaT]:
+        """
+        Read a JSON file and create a schema-aware PandasFrame.
+
+        Args:
+            path_or_buf: File path or buffer to read from.
+            schema: Schema class to associate with the DataFrame.
+            **kwargs: Additional arguments passed to ``pd.read_json``.
+
+        Returns:
+            PandasFrame with schema metadata.
+
+        """
+        return cls.from_schema(pd.read_json(path_or_buf, **kwargs), schema)
+
+    @classmethod
+    def read_excel(cls, io: Any, schema: type[SchemaT], **kwargs: Any) -> PandasFrame[SchemaT]:
+        """
+        Read an Excel file and create a schema-aware PandasFrame.
+
+        Args:
+            io: File path or ExcelFile object to read from.
+            schema: Schema class to associate with the DataFrame.
+            **kwargs: Additional arguments passed to ``pd.read_excel``.
+
+        Returns:
+            PandasFrame with schema metadata.
+
+        """
+        return cls.from_schema(pd.read_excel(io, **kwargs), schema)
+
     if TYPE_CHECKING:
+
         @overload
         def __getitem__(self, key: Column) -> pd.Series: ...
 
