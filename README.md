@@ -14,9 +14,13 @@ class UserData(BaseSchema):
 
 
 def process(df: PandasFrame[UserData]) -> None:
-    df['user_id']  # ✓ OK
-    df['username']  # ✗ Error: Column 'username' not in UserData
+  df[UserData.user_id]  # ✓ Schema descriptor — autocomplete, refactor-safe
+  df['user_id']  # ✓ String access — also validated by checker
+  df['username']  # ✗ Error: Column 'username' not in UserData
 ```
+
+**Why descriptors?** Rename a column in ONE place (`user_id = Column(type=int)`), and all references — `Schema.user_id`,
+`str(Schema.user_id)`, `Schema.user_id.col` — update automatically. No find-and-replace across string literals.
 
 ---
 
@@ -99,13 +103,14 @@ print(df[SalesData.metrics].mean())  # All metric_* columns
 
 # Type-safe pandas operations
 def analyze(data: PandasFrame[SalesData]) -> float:
-    return data[SalesData.revenue].mean()  # ✓ Type checker knows this is a float Column
-    # return data['profit'].mean()         # ✗ Error at lint-time
+  data[SalesData.revenue]  # ✓ Validated by type checker
+  data['profit']  # ✗ Error at lint-time: 'profit' not in SalesData
+  return data[SalesData.revenue].mean()
 
 
 # Standard pandas access still works
 filtered = df[df[SalesData.revenue] > 1000]
-grouped = df.groupby('customer_id')['revenue'].sum()
+grouped = df.groupby(SalesData.customer_id)[SalesData.revenue].sum()
 ```
 
 ### Use With Polars
@@ -122,8 +127,9 @@ print(df.select(SalesData.revenue.col).sum())
 
 # Type-safe polars operations
 def analyze_polars(data: PolarsFrame[SalesData]) -> float:
+  data.select(SalesData.revenue.col)  # ✓ OK
+  data.select(['profit'])  # ✗ Error at lint-time: 'profit' not in SalesData
     return data.select(SalesData.revenue.col).mean()
-    # return data.select(['profit'])  # ✗ Error at lint-time
 
 
 # Polars methods work as expected
@@ -207,20 +213,17 @@ mypy src/
 
 Fast feedback reduces development time. The typedframes Rust binary provides near-instant column checking.
 
-**Benchmark results** (11 Python files, 5 runs each, caches cleared):
+**Benchmark results** (10 runs, 3 warmup, caches cleared between runs):
 
-| Tool               | Version | What it does                  | Time         |
-|--------------------|---------|-------------------------------|--------------|
-| typedframes        | 0.1.0   | DataFrame column checker      | 3ms ±740µs   |
-| ruff               | 0.15.0  | Linter (no type checking)     | 39ms ±16ms   |
-| ty                 | 0.0.16  | Type checker                  | 136ms ±8ms   |
-| pyrefly            | 0.52.0  | Type checker                  | 268ms ±8ms   |
-| mypy               | 1.19.1  | Type checker (no plugin)      | 9.43s ±176ms |
-| mypy + typedframes | 1.19.1  | Type checker + column checker | 9.17s ±659ms |
-| pyright            | 1.1.408 | Type checker                  | 2.38s ±594ms |
-
-**Note:** On small codebases, startup time dominates. On larger projects, ty and pyrefly are typically 10-60x faster
-than mypy/pyright.
+| Tool               | Version | What it does                  | typedframes (11 files) | great_expectations (490 files) |
+|--------------------|---------|-------------------------------|------------------------|--------------------------------|
+| typedframes        | 0.1.0   | DataFrame column checker      | 961µs ±56µs            | 930µs ±89µs                    |
+| ruff               | 0.15.0  | Linter (no type checking)     | 39ms ±12ms             | 360ms ±18ms                    |
+| ty                 | 0.0.16  | Type checker                  | 146ms ±13ms            | 1.65s ±26ms                    |
+| pyrefly            | 0.52.0  | Type checker                  | 152ms ±7ms             | 693ms ±33ms                    |
+| mypy               | 1.19.1  | Type checker (no plugin)      | 9.15s ±218ms           | 12.13s ±400ms                  |
+| mypy + typedframes | 1.19.1  | Type checker + column checker | 9.34s ±331ms           | 13.89s ±491ms                  |
+| pyright            | 1.1.408 | Type checker                  | 2.34s ±335ms           | 8.37s ±253ms                   |
 
 *Run `uv run python benchmarks/benchmark_checkers.py` to reproduce.*
 
@@ -242,29 +245,29 @@ parsing.
 Comprehensive comparison of pandas/DataFrame typing and validation tools. **typedframes focuses on static analysis**
 —catching errors at lint-time before your code runs.
 
-| Feature                         | typedframes            | Pandera     | strictly_typed_pandas | pandas-stubs | dataenforce | pandas-type-checks | StaticFrame      | narwhals |
-|---------------------------------|------------------------|-------------|-----------------------|--------------|-------------|--------------------|------------------|----------|
-| **Version tested**              | 0.1.0                  | 0.29.0      | 0.3.6                 | 3.0.0        | 0.1.2       | 1.1.3              | 3.7.0            | 2.16.0   |
+| Feature                         | typedframes            | Pandera     | Great Expectations | strictly_typed_pandas | pandas-stubs | dataenforce | pandas-type-checks | StaticFrame      | narwhals |
+|---------------------------------|------------------------|-------------|--------------------|-----------------------|--------------|-------------|--------------------|------------------|----------|
+| **Version tested**              | 0.1.0                  | 0.29.0      | 1.4.3              | 0.3.6                 | 3.0.0        | 0.1.2       | 1.1.3              | 3.7.0            | 2.16.0   |
 | **Analysis Type**               |
-| When errors are caught          | **Static (lint-time)** | Runtime     | Static + Runtime      | Static       | Runtime     | Runtime            | Static + Runtime | Runtime  |
+| When errors are caught          | **Static (lint-time)** | Runtime     | Runtime            | Static + Runtime      | Static       | Runtime     | Runtime            | Static + Runtime | Runtime  |
 | **Static Analysis (our focus)** |
-| Mypy plugin                     | ✅ Yes                  | ⚠️ Limited  | ✅ Yes                 | ✅ Yes        | ❌ No        | ❌ No               | ⚠️ Basic         | ❌ No     |
-| Standalone checker              | ✅ Rust (~1ms)          | ❌ No        | ❌ No                  | ❌ No         | ❌ No        | ❌ No               | ❌ No             | ❌ No     |
-| Column name checking            | ✅ Yes                  | ⚠️ Limited  | ✅ Yes                 | ❌ No         | ❌ No        | ❌ No               | ✅ Yes            | ❌ No     |
-| Column type checking            | ✅ Yes                  | ⚠️ Limited  | ✅ Yes                 | ❌ No         | ❌ No        | ❌ No               | ✅ Yes            | ❌ No     |
-| Typo suggestions                | ✅ Yes                  | ❌ No        | ❌ No                  | ❌ No         | ❌ No        | ❌ No               | ❌ No             | ❌ No     |
+| Mypy plugin                     | ✅ Yes                  | ⚠️ Limited  | ❌ No               | ✅ Yes                 | ✅ Yes        | ❌ No        | ❌ No               | ⚠️ Basic         | ❌ No     |
+| Standalone checker              | ✅ Rust (~1ms)          | ❌ No        | ❌ No               | ❌ No                  | ❌ No         | ❌ No        | ❌ No               | ❌ No             | ❌ No     |
+| Column name checking            | ✅ Yes                  | ⚠️ Limited  | ❌ No               | ✅ Yes                 | ❌ No         | ❌ No        | ❌ No               | ✅ Yes            | ❌ No     |
+| Column type checking            | ✅ Yes                  | ⚠️ Limited  | ❌ No               | ✅ Yes                 | ❌ No         | ❌ No        | ❌ No               | ✅ Yes            | ❌ No     |
+| Typo suggestions                | ✅ Yes                  | ❌ No        | ❌ No               | ❌ No                  | ❌ No         | ❌ No        | ❌ No               | ❌ No             | ❌ No     |
 | **Runtime Validation**          |
-| Data validation                 | ❌ No                   | ✅ Excellent | ✅ typeguard           | ❌ No         | ✅ Yes       | ✅ Yes              | ✅ Yes            | ❌ No     |
-| Value constraints               | ❌ No                   | ✅ Yes       | ❌ No                  | ❌ No         | ❌ No        | ❌ No               | ✅ Yes            | ❌ No     |
+| Data validation                 | ❌ No                   | ✅ Excellent | ✅ Excellent        | ✅ typeguard           | ❌ No         | ✅ Yes       | ✅ Yes              | ✅ Yes            | ❌ No     |
+| Value constraints               | ❌ No                   | ✅ Yes       | ✅ Excellent        | ❌ No                  | ❌ No         | ❌ No        | ❌ No               | ✅ Yes            | ❌ No     |
 | **Schema Features**             |
-| Column grouping                 | ✅ ColumnSet            | ❌ No        | ❌ No                  | ❌ No         | ❌ No        | ❌ No               | ❌ No             | ❌ No     |
-| Regex column matching           | ✅ Yes                  | ❌ No        | ❌ No                  | ❌ No         | ❌ No        | ❌ No               | ❌ No             | ❌ No     |
+| Column grouping                 | ✅ ColumnGroup          | ❌ No        | ❌ No               | ❌ No                  | ❌ No         | ❌ No        | ❌ No               | ❌ No             | ❌ No     |
+| Regex column matching           | ✅ Yes                  | ❌ No        | ❌ No               | ❌ No                  | ❌ No         | ❌ No        | ❌ No               | ❌ No             | ❌ No     |
 | **Backend Support**             |
-| Pandas                          | ✅ Yes                  | ✅ Yes       | ✅ Yes                 | ✅ Yes        | ✅ Yes       | ✅ Yes              | ❌ Own            | ✅ Yes    |
-| Polars                          | ✅ Yes                  | ✅ Yes       | ❌ No                  | ❌ No         | ❌ No        | ❌ No               | ❌ Own            | ✅ Yes    |
-| DuckDB, cuDF, etc.              | ❌ No                   | ❌ No        | ❌ No                  | ❌ No         | ❌ No        | ❌ No               | ❌ No             | ✅ Yes    |
+| Pandas                          | ✅ Yes                  | ✅ Yes       | ✅ Yes              | ✅ Yes                 | ✅ Yes        | ✅ Yes       | ✅ Yes              | ❌ Own            | ✅ Yes    |
+| Polars                          | ✅ Yes                  | ✅ Yes       | ❌ No               | ❌ No                  | ❌ No         | ❌ No        | ❌ No               | ❌ Own            | ✅ Yes    |
+| DuckDB, cuDF, etc.              | ❌ No                   | ❌ No        | ✅ Spark, SQL       | ❌ No                  | ❌ No         | ❌ No        | ❌ No               | ❌ No             | ✅ Yes    |
 | **Project Status (Feb 2026)**   |
-| Active development              | ✅ Yes                  | ✅ Yes       | ⚠️ Low                | ✅ Yes        | ❌ Inactive  | ⚠️ Low             | ✅ Yes            | ✅ Yes    |
+| Active development              | ✅ Yes                  | ✅ Yes       | ✅ Yes              | ⚠️ Low                | ✅ Yes        | ❌ Inactive  | ⚠️ Low             | ✅ Yes            | ✅ Yes    |
 
 **Legend:** ✅ Full support | ⚠️ Limited/Partial | ❌ Not supported
 
@@ -293,6 +296,11 @@ Comprehensive comparison of pandas/DataFrame typing and validation tools. **type
   across pandas, polars, DuckDB, cuDF, and more. Solves a different problem—write-once-run-anywhere portability, not
   type safety. See [Why Abstraction Layers Don't Solve Type Safety](#why-abstraction-layers-dont-solve-type-safety)
   below.
+
+- **[Great Expectations](https://greatexpectations.io/)** (v1.4.3): Comprehensive data quality framework. Defines
+  "expectations" (assertions) about data values, distributions, and schema properties. Excellent for runtime
+  validation, data documentation, and data quality monitoring. No static analysis or column-level type checking in
+  code. Supports pandas, Spark, and SQL backends.
 
 ### Type Checkers (Not DataFrame-Specific)
 
@@ -328,6 +336,7 @@ These tools serve different purposes:
 | Runtime data validation                              | Pandera                             |
 | Both static + runtime                                | typedframes + `to_pandera_schema()` |
 | Cross-library portability (write once, run anywhere) | narwhals                            |
+| Data quality monitoring / pipeline validation        | Great Expectations                  |
 | Immutable DataFrames from scratch                    | StaticFrame                         |
 | Pandas API type hints only                           | pandas-stubs                        |
 
@@ -341,7 +350,6 @@ typedframes uses **explicit backend types** to ensure complete type safety:
 from typedframes import BaseSchema, Column
 from typedframes.pandas import PandasFrame
 from typedframes.polars import PolarsFrame
-import polars as pl
 
 
 class UserData(BaseSchema):
@@ -351,12 +359,12 @@ class UserData(BaseSchema):
 
 # Pandas pipeline - type checker knows pandas methods
 def pandas_analyze(df: PandasFrame[UserData]) -> PandasFrame[UserData]:
-    return df[df['user_id'] > 100]  # ✓ Pandas syntax
+  return df[df[UserData.user_id] > 100]  # ✓ Pandas syntax
 
 
 # Polars pipeline - type checker knows polars methods
 def polars_analyze(df: PolarsFrame[UserData]) -> PolarsFrame[UserData]:
-    return df.filter(pl.col('user_id') > 100)  # ✓ Polars syntax
+  return df.filter(UserData.user_id.col > 100)  # ✓ Polars syntax
 
 
 # Type checker prevents mixing backends
@@ -620,7 +628,7 @@ class Orders(BaseSchema):
 
 
 def calculate_revenue(orders: PandasFrame[Orders]) -> float:
-    return orders['total'].sum()
+  return orders[Orders.total].sum()
 
 
 df = PandasFrame.read_csv("orders.csv", Orders)
@@ -670,9 +678,9 @@ class AggregatedSales(BaseSchema):
 
 
 def aggregate_daily(df: PandasFrame[RawSales]) -> PandasFrame[AggregatedSales]:
-    result = df.groupby('date').agg({
-        'price': 'sum',
-        'quantity': 'sum'
+  result = df.groupby(RawSales.date).agg({
+    str(RawSales.price): 'sum',
+    str(RawSales.quantity): 'sum',
     }).reset_index()
 
     result.columns = ['date', 'total_revenue', 'total_quantity']
@@ -686,8 +694,9 @@ aggregated = aggregate_daily(raw)
 
 # Type checker validates schema transformations
 def analyze(df: PandasFrame[AggregatedSales]) -> float:
-    return df['total_revenue'].mean()  # ✓ OK
-    # df['price']  # ✗ Error: 'price' not in AggregatedSales
+  df[AggregatedSales.total_revenue]  # ✓ OK
+  df['price']  # ✗ Error: 'price' not in AggregatedSales
+  return df[AggregatedSales.total_revenue].mean()
 ```
 
 ### Polars Performance Pipeline

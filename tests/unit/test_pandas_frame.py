@@ -329,6 +329,106 @@ class TestPandasFrame(unittest.TestCase):
         # cleanup
         Path(parquet_path).unlink()
 
+    def test_should_groupby_column_descriptor(self) -> None:
+        """Test that groupby accepts a Column descriptor."""
+        # arrange
+        raw_df = pd.DataFrame({"user_id": [1, 1, 2], "email": ["a@b.com", "c@d.com", "e@f.com"]})
+        sut = PandasFrame.from_schema(raw_df, GroupedSchema)
+
+        # act
+        result = sut.groupby(GroupedSchema.user_id).count()
+
+        # assert
+        self.assertEqual(result.loc[1, "email"], 2)
+        self.assertEqual(result.loc[2, "email"], 1)
+
+    def test_should_groupby_column_list(self) -> None:
+        """Test that groupby accepts a list of Column descriptors."""
+        # arrange
+        raw_df = pd.DataFrame({"user_id": [1, 1, 2], "email": ["a@b.com", "a@b.com", "e@f.com"]})
+        sut = PandasFrame.from_schema(raw_df, GroupedSchema)
+
+        # act
+        result = sut.groupby([GroupedSchema.user_id, GroupedSchema.email]).size()
+
+        # assert
+        self.assertEqual(result[(1, "a@b.com")], 2)
+        self.assertEqual(result[(2, "e@f.com")], 1)
+
+    def test_should_groupby_column_set(self) -> None:
+        """Test that groupby accepts a ColumnSet descriptor."""
+        # arrange
+        raw_df = pd.DataFrame({
+            "timestamp": ["t1", "t1", "t2"], "temp_1": [20.0, 20.0, 25.0], "temp_2": [30.0, 30.0, 35.0],
+        })
+        sut = PandasFrame.from_schema(raw_df, SensorSchema)
+
+        # act
+        result = sut.groupby(SensorSchema.temperatures).size().reset_index(name="count")
+
+        # assert
+        self.assertEqual(len(result), 2)
+
+    def test_should_groupby_column_group(self) -> None:
+        """Test that groupby accepts a ColumnGroup descriptor."""
+        # arrange
+        raw_df = pd.DataFrame({"user_id": [1, 1, 2], "email": ["a@b.com", "a@b.com", "e@f.com"]})
+        sut = PandasFrame.from_schema(raw_df, GroupedSchema)
+
+        # act
+        result = sut.groupby(GroupedSchema.all_fields).size()
+
+        # assert
+        self.assertEqual(result[(1, "a@b.com")], 2)
+
+    def test_should_groupby_string(self) -> None:
+        """Test that groupby still works with plain strings."""
+        # arrange
+        raw_df = pd.DataFrame({"user_id": [1, 1, 2], "email": ["a@b.com", "c@d.com", "e@f.com"]})
+        sut = PandasFrame.from_schema(raw_df, GroupedSchema)
+
+        # act
+        result = sut.groupby("user_id").count()
+
+        # assert
+        self.assertEqual(result.loc[1, "email"], 2)
+
+    def test_should_groupby_none(self) -> None:
+        """Test that groupby with None uses default pandas behavior."""
+        # arrange
+        raw_df = pd.DataFrame({"user_id": [1, 2], "email": ["a@b.com", "c@d.com"]})
+        sut = PandasFrame.from_schema(raw_df, GroupedSchema)
+
+        # act / assert — groupby(None) with axis=0 raises, but we just verify no crash in _resolve_by
+        resolved = sut._resolve_by(None)
+        self.assertIsNone(resolved)
+
+    def test_should_groupby_mixed_list(self) -> None:
+        """Test that groupby accepts a mixed list of descriptors and strings."""
+        # arrange
+        raw_df = pd.DataFrame({"user_id": [1, 1, 2], "email": ["a@b.com", "a@b.com", "e@f.com"]})
+        sut = PandasFrame.from_schema(raw_df, GroupedSchema)
+
+        # act
+        result = sut.groupby([GroupedSchema.user_id, "email"]).size()
+
+        # assert
+        self.assertEqual(result[(1, "a@b.com")], 2)
+
+    def test_should_groupby_list_with_column_set(self) -> None:
+        """Test that groupby accepts a list containing a ColumnSet."""
+        # arrange
+        raw_df = pd.DataFrame({
+            "timestamp": ["t1", "t1", "t2"], "temp_1": [20.0, 20.0, 25.0], "temp_2": [30.0, 30.0, 35.0],
+        })
+        sut = PandasFrame.from_schema(raw_df, SensorSchema)
+
+        # act
+        result = sut.groupby([SensorSchema.timestamp, SensorSchema.temperatures]).size().reset_index(name="count")
+
+        # assert
+        self.assertEqual(len(result), 2)
+
     def test_should_read_excel(self) -> None:
         """Test that read_excel creates a schema-aware PandasFrame."""
         # arrange

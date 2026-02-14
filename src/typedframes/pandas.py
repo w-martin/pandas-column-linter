@@ -194,6 +194,46 @@ class PandasFrame(pd.DataFrame, Generic[SchemaT]):
             return super().__getitem__(names)
         return super().__getitem__(key)
 
+    def _resolve_by(
+            self,
+            by: Column | ColumnSet | ColumnGroup | str | list[Any] | None,
+    ) -> str | list[str] | None:
+        """Convert schema descriptors in ``by`` to column name strings."""
+        if by is None:
+            return None
+        if isinstance(by, Column):
+            return by.column_name
+        if isinstance(by, ColumnSet):
+            return self._column_consumed_map.get(by.name, [])
+        if isinstance(by, ColumnGroup):
+            return by.get_column_names(self._column_consumed_map)
+        if isinstance(by, list):
+            resolved: list[str] = []
+            for item in by:
+                result = self._resolve_by(item)
+                if isinstance(result, list):
+                    resolved.extend(result)
+                else:
+                    resolved.append(result)  # ty: ignore[invalid-argument-type]
+            return resolved
+        return by
+
+    def groupby(self, by: Any = None, **kwargs: Any) -> Any:  # ty: ignore[invalid-method-override]
+        """Group by schema descriptors, strings, or mixed lists.
+
+        Accepts ``Column``, ``ColumnSet``, ``ColumnGroup`` descriptors
+        in addition to standard pandas groupby arguments.
+
+        Args:
+            by: Column(s) to group by. Accepts schema descriptors.
+            **kwargs: Additional arguments passed to ``pd.DataFrame.groupby``.
+
+        Returns:
+            DataFrameGroupBy object.
+
+        """
+        return super().groupby(self._resolve_by(by), **kwargs)
+
     @property
     def _constructor(self) -> type[Self]:
         """Return constructor for slicing/operations to preserve PandasFrame type."""
