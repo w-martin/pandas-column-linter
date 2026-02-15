@@ -7,10 +7,7 @@ name = "typedframes-checker"
 version = "0.1.0"
 description = "Rust checker + mypy plugin for typedframes"
 requires-python = ">=3.11"
-dependencies = ["typedframes", "mypy"]
-
-[tool.uv.sources]
-typedframes = { workspace = true }
+dependencies = ["mypy"]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]

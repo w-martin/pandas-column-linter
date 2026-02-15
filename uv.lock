@@ -1531,14 +1531,10 @@ version = "0.1.0"
 source = { editable = "typedframes-checker" }
 dependencies = [
     { name = "mypy" },
-    { name = "typedframes" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "mypy" },
-    { name = "typedframes", editable = "." },
-]
+requires-dist = [{ name = "mypy" }]
 
 [[package]]
 name = "typeguard"

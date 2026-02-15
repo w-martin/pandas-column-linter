@@ -14,6 +14,9 @@ license = { text = "MIT" }
 requires-python = ">=3.11"
 dependencies = []
 
+[project.scripts]
+typedframes = "typedframes.cli:main"
+
 [project.optional-dependencies]
 pandas = ["pandas>=2.3.3"]
 pandera = ["pandera>=0.22.0"]
@@ -71,6 +74,7 @@ ignore = [
 "examples/*" = ["T201", "INP001"]
 "tasks.py" = ["T201"]
 "typedframes-checker/src/typedframes_checker/mypy.py" = ["S603"]
+"src/typedframes/cli.py" = ["T201"]
 "benchmarks/*" = ["T201", "S603", "S607", "PLR2004", "PLR0912", "PLR0913", "TRY300"]
 
 [tool.ruff.lint.mccabe]

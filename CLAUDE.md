@@ -37,6 +37,7 @@
 - `tests/fixtures/*`: `T201` (print for test output)
 - `examples/*`: `T201` (print), `INP001` (standalone scripts)
 - `typedframes-checker/src/typedframes_checker/mypy.py`: `S603` (subprocess for checker execution)
+- `src/typedframes/cli.py`: `T201` (print for CLI output)
 
 ## Commands
 

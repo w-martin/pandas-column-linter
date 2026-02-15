@@ -69,6 +69,12 @@ or
 uv add typedframes
 ```
 
+For static analysis (`typedframes check`), also install the checker (Rust-based, installed separately like type stubs):
+
+```shell
+pip install typedframes-checker
+```
+
 ---
 
 ## Quick Start

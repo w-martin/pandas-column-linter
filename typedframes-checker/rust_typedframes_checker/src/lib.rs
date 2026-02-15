@@ -160,6 +160,7 @@ pub struct LintError {
 pub struct Linter {
     schemas: HashMap<String, Vec<String>>,
     variables: HashMap<String, (String, usize)>, // var_name -> (schema_name, defined_at_line)
+    functions: HashMap<String, String>,           // func_name -> schema_name (from return type)
     line_index: Option<LineIndex>,
     source: String,
 }
@@ -169,6 +170,7 @@ impl Linter {
         Self {
             schemas: HashMap::new(),
             variables: HashMap::new(),
+            functions: HashMap::new(),
             line_index: None,
             source: String::new(),
         }
@@ -210,6 +212,50 @@ impl Linter {
             Some(s.value.to_str())
         } else {
             None
+        }
+    }
+
+    /// Check if a type name is a DataFrame/Frame type
+    fn is_frame_type(name: &str) -> bool {
+        matches!(name, "DataFrame" | "PandasFrame" | "PolarsFrame")
+    }
+
+    /// Extract schema name from a type annotation like PandasFrame[Schema]
+    fn extract_schema_from_annotation(expr: &Expr) -> Option<&str> {
+        match expr {
+            Expr::Subscript(subscript) => {
+                let type_name = match &*subscript.value {
+                    Expr::Name(name) => Some(name.id.as_str()),
+                    Expr::Attribute(attr) => Some(attr.attr.as_str()),
+                    _ => None,
+                };
+                if let Some(name) = type_name {
+                    if Self::is_frame_type(name) {
+                        if let Expr::Name(schema_name) = &*subscript.slice {
+                            return Some(schema_name.id.as_str());
+                        }
+                    }
+                }
+                None
+            }
+            Expr::StringLiteral(s) => {
+                let text = s.value.to_str();
+                let patterns = ["DataFrame[", "PandasFrame[", "PolarsFrame["];
+                for pattern in patterns {
+                    if text.contains(pattern) {
+                        if let Some(start) = text.find('[') {
+                            if let Some(end) = text.rfind(']') {
+                                let schema = text[start + 1..end].trim();
+                                if !schema.is_empty() && !schema.contains(',') {
+                                    return Some(schema);
+                                }
+                            }
+                        }
+                    }
+                }
+                None
+            }
+            _ => None,
         }
     }
 
@@ -365,6 +411,13 @@ impl Linter {
                 }
             }
             Stmt::FunctionDef(func_def) => {
+                // Track return type annotations like -> PandasFrame[Schema]
+                if let Some(returns) = &func_def.returns {
+                    if let Some(schema_name) = Self::extract_schema_from_annotation(returns) {
+                        self.functions
+                            .insert(func_def.name.to_string(), schema_name.to_string());
+                    }
+                }
                 for body_stmt in &func_def.body {
                     self.visit_stmt(body_stmt, errors);
                 }
@@ -583,6 +636,19 @@ impl Linter {
                                             );
                                         }
                                     }
+                                }
+                            }
+                        }
+                    } else if let Expr::Name(func_name) = &*call.func {
+                        // Handle df = load_users() where load_users() -> PandasFrame[Schema]
+                        if let Some(schema_name) = self.functions.get(func_name.id.as_str()) {
+                            let schema_name = schema_name.clone();
+                            for target in &assign.targets {
+                                if let Expr::Name(target_name) = target {
+                                    self.variables.insert(
+                                        target_name.id.to_string(),
+                                        (schema_name.clone(), current_line),
+                                    );
                                 }
                             }
                         }
@@ -911,5 +977,39 @@ print(df["wrong_column"])
         assert_eq!(errors.len(), 1);
         assert!(errors[0].message.contains("wrong_column"));
         assert!(errors[0].message.contains("UserSchema"));
+    }
+
+    #[test]
+    fn test_should_track_function_return_type() {
+        // arrange
+        let source = r#"
+from typedframes import BaseSchema, Column
+from typedframes.pandas import PandasFrame
+
+class UserSchema(BaseSchema):
+    user_id = Column(type=int)
+    email = Column(type=str)
+
+def load_users() -> PandasFrame[UserSchema]:
+    return PandasFrame.from_schema(pd.read_csv("users.csv"), UserSchema)
+
+df = load_users()
+print(df["user_id"])
+print(df["name"])
+print(df["emai"])
+"#;
+        let mut linter = Linter::new();
+
+        // act
+        let errors = linter
+            .check_file_internal(source, Path::new("test.py"))
+            .unwrap();
+
+        // assert
+        assert_eq!(errors.len(), 2);
+        assert!(errors[0].message.contains("name"));
+        assert!(errors[0].message.contains("UserSchema"));
+        assert!(errors[1].message.contains("emai"));
+        assert!(errors[1].message.contains("did you mean 'email'"));
     }
 }
