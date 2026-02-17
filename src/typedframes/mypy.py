@@ -82,8 +82,8 @@ class TypedFramesPlugin(Plugin):
         return errors
 
     def get_method_hook(
-            self,
-            fullname: str,
+        self,
+        fullname: str,
     ) -> Callable[[MethodContext], "Type"] | None:
         """Return a hook for DataFrame access methods."""
         # Target common methods where column access happens

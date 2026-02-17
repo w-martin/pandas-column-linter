@@ -175,8 +175,8 @@ class PandasFrame(pd.DataFrame, Generic[SchemaT]):
         def __getitem__(self, key: pd.Series) -> PandasFrame[SchemaT]: ...
 
     def __getitem__(  # ty: ignore[invalid-method-override]
-            self,
-            key: Column | ColumnSet | ColumnGroup | str | list[str] | pd.Series,
+        self,
+        key: Column | ColumnSet | ColumnGroup | str | list[str] | pd.Series,
     ) -> pd.Series | pd.DataFrame:
         """
         Access columns by schema descriptor, string key, or boolean mask.
@@ -195,8 +195,8 @@ class PandasFrame(pd.DataFrame, Generic[SchemaT]):
         return super().__getitem__(key)
 
     def _resolve_by(
-            self,
-            by: Column | ColumnSet | ColumnGroup | str | list[Any] | None,
+        self,
+        by: Column | ColumnSet | ColumnGroup | str | list[Any] | None,
     ) -> str | list[str] | None:
         """Convert schema descriptors in ``by`` to column name strings."""
         if by is None:

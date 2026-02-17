@@ -272,9 +272,9 @@ def _format_cell(result: BenchmarkResult | None) -> str:
 
 
 def generate_markdown_table(
-        tool_results: dict[str, dict[str, BenchmarkResult | None]],
-        tool_meta: dict[str, tuple[str, str]],
-        codebase_labels: list[tuple[str, int]],
+    tool_results: dict[str, dict[str, BenchmarkResult | None]],
+    tool_meta: dict[str, tuple[str, str]],
+    codebase_labels: list[tuple[str, int]],
 ) -> str:
     """Generate markdown table with one column per codebase.
 
@@ -304,10 +304,10 @@ def generate_markdown_table(
 
 
 def update_readme(
-        project_root: Path,
-        tool_results: dict[str, dict[str, BenchmarkResult | None]],
-        tool_meta: dict[str, tuple[str, str]],
-        codebase_labels: list[tuple[str, int]],
+    project_root: Path,
+    tool_results: dict[str, dict[str, BenchmarkResult | None]],
+    tool_meta: dict[str, tuple[str, str]],
+    codebase_labels: list[tuple[str, int]],
 ) -> None:
     """Update the benchmark table in README.md."""
     readme_path = project_root / "README.md"
@@ -344,11 +344,11 @@ def count_python_files(directory: Path) -> int:
 
 
 def run_codebase_benchmarks(
-        label: str,
-        target: str,
-        target_dir: Path,
-        tools: list[ToolInfo],
-        project_root: Path,
+    label: str,
+    target: str,
+    target_dir: Path,
+    tools: list[ToolInfo],
+    project_root: Path,
 ) -> list[BenchmarkResult]:
     """Run benchmarks for a single codebase."""
     print(f"\n{'=' * 60}")
@@ -435,9 +435,9 @@ def build_tools(binary_path: Path) -> list[ToolInfo]:
 
 
 def print_summary(
-        tool_results: dict[str, dict[str, BenchmarkResult | None]],
-        tool_meta: dict[str, tuple[str, str]],
-        codebase_labels: list[tuple[str, int]],
+    tool_results: dict[str, dict[str, BenchmarkResult | None]],
+    tool_meta: dict[str, tuple[str, str]],
+    codebase_labels: list[tuple[str, int]],
 ) -> None:
     """Print human-readable summary table to stdout."""
     print("\n" + "=" * 100)

@@ -26,9 +26,9 @@ class SchemaConflictError(TypeError):
 
 
 def combine_schemas(
-        schema_a: type[BaseSchema],
-        schema_b: type[BaseSchema],
-        name: str | None = None,
+    schema_a: type[BaseSchema],
+    schema_b: type[BaseSchema],
+    name: str | None = None,
 ) -> type[BaseSchema]:
     """
     Combine two schemas into a new schema with all columns from both.

@@ -201,6 +201,7 @@ class TestCombineSchemas(unittest.TestCase):
         """Test that MI raises SchemaConflictError for type conflicts."""
         # act/assert
         with self.assertRaises(SchemaConflictError) as ctx:
+
             class _Conflict(Users, OrdersConflict):
                 """Should fail due to user_id type conflict."""
 
