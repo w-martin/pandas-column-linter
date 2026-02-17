@@ -1040,7 +1040,7 @@ print(df["emai"])
     fn test_is_enabled() {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path();
-        
+
         // Case 1: No pyproject.toml -> enabled by default
         assert!(is_enabled(root));
 
