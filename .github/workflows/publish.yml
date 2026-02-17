@@ -37,16 +37,16 @@ jobs:
         run: uv python install 3.11
 
       - name: Python format check
-        run: uv run ruff format . --check
+        run: uv run inv format-check
 
       - name: Python lint
-        run: uv run ruff check .
+        run: uv run inv lint
 
       - name: Build extension module
         run: uv run maturin develop
 
       - name: Python tests
-        run: uv run pytest --cov-fail-under=90
+        run: uv run inv test
 
   build_wheels:
     name: Build wheels (${{ matrix.target }})
