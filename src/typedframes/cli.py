@@ -21,12 +21,11 @@ def _collect_python_files(path: Path) -> list[Path]:
 def _check_files(files: list[Path]) -> list[dict]:
     """Run the Rust checker on each file, returning all errors with file paths."""
     try:
-        from typedframes_checker._rust_checker import check_file  # ty: ignore[unresolved-import]
+        from typedframes._rust_checker import check_file  # ty: ignore[unresolved-import]
     except ImportError:
         msg = (
-            "The 'check' command requires the typedframes-checker package "
-            "(Rust-based column checker, installed separately like type stubs).\n"
-            "Install it with: pip install typedframes-checker"
+            "The Rust checker extension was not found. "
+            "Ensure typedframes was installed from a wheel or built with: maturin develop"
         )
         print(msg, file=sys.stderr)
         sys.exit(1)

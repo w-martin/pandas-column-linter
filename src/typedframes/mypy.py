@@ -51,7 +51,7 @@ class TypedFramesPlugin(Plugin):
 
     def _run_via_extension(self, file_path: str) -> list[dict[str, Any]]:
         """Run the checker via the Rust extension module."""
-        from typedframes_checker._rust_checker import check_file  # ty: ignore[unresolved-import]
+        from typedframes._rust_checker import check_file  # ty: ignore[unresolved-import]
 
         result_json = str(check_file(file_path))
         return json.loads(result_json)
@@ -82,8 +82,8 @@ class TypedFramesPlugin(Plugin):
         return errors
 
     def get_method_hook(
-        self,
-        fullname: str,
+            self,
+            fullname: str,
     ) -> Callable[[MethodContext], "Type"] | None:
         """Return a hook for DataFrame access methods."""
         # Target common methods where column access happens
@@ -113,11 +113,6 @@ class TypedFramesPlugin(Plugin):
                     context.api.fail(err["message"], context.context)
 
         return context.default_return_type
-
-
-# Keep old names for backwards compatibility
-PandasLinterPlugin = TypedFramesPlugin
-LinterNotFoundError = CheckerNotFoundError
 
 
 def plugin(version: str) -> type[TypedFramesPlugin]:  # noqa: ARG001

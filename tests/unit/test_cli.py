@@ -34,7 +34,7 @@ class TestCli(unittest.TestCase):
         original_import = builtins.__import__
 
         def mock_import(name: str, *args: object, **kwargs: object) -> object:
-            if name == "typedframes_checker._rust_checker":
+            if name == "typedframes._rust_checker":
                 raise ImportError(name)
             return original_import(name, *args, **kwargs)
 
@@ -53,7 +53,7 @@ class TestCli(unittest.TestCase):
                 _check_files([py_file])
 
             self.assertEqual(ctx.exception.code, 1)
-            self.assertIn("requires the typedframes-checker package", captured.getvalue())
+            self.assertIn("Rust checker extension was not found", captured.getvalue())
 
     def test_should_collect_single_python_file(self) -> None:
         """Test collecting a single .py file."""

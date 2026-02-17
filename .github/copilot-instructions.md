@@ -2,9 +2,9 @@
 
 ## Package Structure
 
-- `typedframes` (core): Pure Python schemas, columns, frames — no Rust, no mypy
-- `typedframes-checker` (workspace member): Rust binary + mypy plugin
-- Optional deps: `typedframes[pandas]`, `typedframes[polars]`
+- `typedframes`: Python schemas, columns, frames + Rust checker (built with maturin)
+- Rust source in `rust/`, compiled into `typedframes._rust_checker` extension module
+- Optional deps: `typedframes[pandas]`, `typedframes[polars]`, `typedframes[mypy]`
 - Import pattern: `from typedframes.pandas import PandasFrame`, `from typedframes.polars import PolarsFrame`
 
 ## Test Guidelines
@@ -29,7 +29,7 @@
 
 ## Commands
 
-- `uv run inv build` - Build Rust checker in `typedframes-checker/` (if source changed)
+- `uv run inv build` - Build Rust checker in `rust/` (if source changed)
 - `uv run inv test` - Tests with coverage (auto-builds)
 - `uv run inv lint` - All linters
 - `uv run inv all` - Full check suite

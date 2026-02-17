@@ -7,17 +7,17 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from mypy.options import Options
-from typedframes_checker.mypy import CheckerNotFoundError, plugin
-from typedframes_checker.mypy import TypedFramesPlugin as PandasLinterPlugin
+
+from typedframes.mypy import CheckerNotFoundError, TypedFramesPlugin, plugin
 
 
-class TestPandasLinterPluginUnit(unittest.TestCase):
-    """Unit tests for the PandasLinterPlugin class."""
+class TestTypedFramesPluginUnit(unittest.TestCase):
+    """Unit tests for the TypedFramesPlugin class."""
 
     def setUp(self) -> None:
         """Set up test fixtures."""
         # arrange
-        self.plugin = PandasLinterPlugin(Options())
+        self.plugin = TypedFramesPlugin(Options())
         self.test_file = "test.py"
         self.error_data = [{"line": 10, "message": "Column 'foo' does not exist"}]
 
@@ -27,9 +27,9 @@ class TestPandasLinterPluginUnit(unittest.TestCase):
         mock_check_file = MagicMock(return_value=json.dumps(self.error_data))
 
         with (
-            patch("typedframes_checker.mypy.get_project_root") as mock_root,
-            patch("typedframes_checker.mypy.is_enabled") as mock_enabled,
-            patch.dict(sys.modules, {"typedframes_checker._rust_checker": MagicMock(check_file=mock_check_file)}),
+            patch("typedframes.mypy.get_project_root") as mock_root,
+            patch("typedframes.mypy.is_enabled") as mock_enabled,
+            patch.dict(sys.modules, {"typedframes._rust_checker": MagicMock(check_file=mock_check_file)}),
         ):
             mock_enabled.return_value = True
             mock_root.return_value = Path()
@@ -48,13 +48,13 @@ class TestPandasLinterPluginUnit(unittest.TestCase):
             )
 
         # Test non-match branch
-        new_plugin = PandasLinterPlugin(Options())  # New plugin to avoid cache
+        new_plugin = TypedFramesPlugin(Options())  # New plugin to avoid cache
         mock_check_file_empty = MagicMock(return_value=json.dumps([]))
 
         with (
-            patch("typedframes_checker.mypy.get_project_root") as mock_root,
-            patch("typedframes_checker.mypy.is_enabled") as mock_enabled,
-            patch.dict(sys.modules, {"typedframes_checker._rust_checker": MagicMock(check_file=mock_check_file_empty)}),
+            patch("typedframes.mypy.get_project_root") as mock_root,
+            patch("typedframes.mypy.is_enabled") as mock_enabled,
+            patch.dict(sys.modules, {"typedframes._rust_checker": MagicMock(check_file=mock_check_file_empty)}),
         ):
             mock_enabled.return_value = True
             mock_root.return_value = Path()
@@ -76,9 +76,9 @@ class TestPandasLinterPluginUnit(unittest.TestCase):
         mock_check_file = MagicMock(return_value=json.dumps(self.error_data))
 
         with (
-            patch("typedframes_checker.mypy.get_project_root") as mock_root,
-            patch("typedframes_checker.mypy.is_enabled") as mock_enabled,
-            patch.dict(sys.modules, {"typedframes_checker._rust_checker": MagicMock(check_file=mock_check_file)}),
+            patch("typedframes.mypy.get_project_root") as mock_root,
+            patch("typedframes.mypy.is_enabled") as mock_enabled,
+            patch.dict(sys.modules, {"typedframes._rust_checker": MagicMock(check_file=mock_check_file)}),
         ):
             mock_enabled.return_value = True
             mock_root.return_value = Path()
@@ -112,7 +112,7 @@ class TestPandasLinterPluginUnit(unittest.TestCase):
     def test_should_not_run_when_disabled(self) -> None:
         """Test that checker does not run when disabled in config."""
         # arrange
-        with patch("typedframes_checker.mypy.is_enabled") as mock_enabled:
+        with patch("typedframes.mypy.is_enabled") as mock_enabled:
             mock_enabled.return_value = False
 
             # act
@@ -142,17 +142,17 @@ class TestPandasLinterPluginUnit(unittest.TestCase):
     def test_should_raise_error_when_extension_not_found(self) -> None:
         """Test that CheckerNotFoundError is raised when extension cannot be imported."""
         # arrange
-        new_plugin = PandasLinterPlugin(Options())
+        new_plugin = TypedFramesPlugin(Options())
 
         with (
-            patch("typedframes_checker.mypy.get_project_root") as mock_root,
-            patch("typedframes_checker.mypy.is_enabled") as mock_enabled,
+            patch("typedframes.mypy.get_project_root") as mock_root,
+            patch("typedframes.mypy.is_enabled") as mock_enabled,
         ):
             mock_enabled.return_value = True
             mock_root.return_value = Path()
 
             # Remove the rust checker from modules to simulate import failure
-            with patch.dict(sys.modules, {"typedframes_checker._rust_checker": None}):
+            with patch.dict(sys.modules, {"typedframes._rust_checker": None}):
                 # act/assert
                 with self.assertRaises(CheckerNotFoundError) as ctx:
                     new_plugin._run_checker(self.test_file)
@@ -164,12 +164,12 @@ class TestPandasLinterPluginUnit(unittest.TestCase):
         # arrange
         far_error_data = [{"line": 100, "message": "Column 'bar' does not exist"}]
         mock_check_file = MagicMock(return_value=json.dumps(far_error_data))
-        new_plugin = PandasLinterPlugin(Options())
+        new_plugin = TypedFramesPlugin(Options())
 
         with (
-            patch("typedframes_checker.mypy.get_project_root") as mock_root,
-            patch("typedframes_checker.mypy.is_enabled") as mock_enabled,
-            patch.dict(sys.modules, {"typedframes_checker._rust_checker": MagicMock(check_file=mock_check_file)}),
+            patch("typedframes.mypy.get_project_root") as mock_root,
+            patch("typedframes.mypy.is_enabled") as mock_enabled,
+            patch.dict(sys.modules, {"typedframes._rust_checker": MagicMock(check_file=mock_check_file)}),
         ):
             mock_enabled.return_value = True
             mock_root.return_value = Path()
@@ -203,4 +203,4 @@ class TestPandasLinterPluginUnit(unittest.TestCase):
         result = plugin("1.0")
 
         # assert
-        self.assertEqual(result, PandasLinterPlugin)
+        self.assertEqual(result, TypedFramesPlugin)

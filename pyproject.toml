@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
 
 [project]
 name = "typedframes"
@@ -21,12 +21,13 @@ typedframes = "typedframes.cli:main"
 pandas = ["pandas>=2.3.3"]
 pandera = ["pandera>=0.22.0"]
 polars = ["polars>=1.37.1"]
+mypy = ["mypy"]
 
-[tool.uv.workspace]
-members = ["typedframes-checker"]
-
-[tool.uv.sources]
-typedframes-checker = { workspace = true }
+[tool.maturin]
+manifest-path = "rust/Cargo.toml"
+python-source = "src"
+module-name = "typedframes._rust_checker"
+features = ["pyo3/extension-module"]
 
 [tool.pytest.ini_options]
 addopts = "--cov=. --cov-report=term-missing --cov-report=json --cov-branch -n auto"
@@ -43,7 +44,7 @@ omit = [
 
 [tool.mypy]
 mypy_path = "src"
-plugins = ["typedframes_checker.mypy"]
+plugins = ["typedframes.mypy"]
 ignore_missing_imports = true
 
 [tool.ruff]
@@ -73,7 +74,6 @@ ignore = [
 "tests/fixtures/*" = ["T201"]
 "examples/*" = ["T201", "INP001"]
 "tasks.py" = ["T201"]
-"typedframes-checker/src/typedframes_checker/mypy.py" = ["S603"]
 "src/typedframes/cli.py" = ["T201"]
 "benchmarks/*" = ["T201", "S603", "S607", "PLR2004", "PLR0912", "PLR0913", "TRY300"]
 
@@ -85,7 +85,6 @@ convention = "google"
 
 [dependency-groups]
 dev = [
-    "typedframes-checker",
     "pandas>=3.0.0",
     "pandera>=0.29.0",
     "polars>=1.38.1",
@@ -152,4 +151,4 @@ no-matching-overload = "ignore"
 [tool.licensecheck]
 using = "PEP631"
 groups = ["dev"]
-ignore_packages = ["mypy-extensions", "typedframes", "typedframes-checker", "pyrefly"]
+ignore_packages = ["mypy-extensions", "typedframes", "pyrefly"]

@@ -386,18 +386,9 @@ def run_codebase_benchmarks(
 
 def find_binary(project_root: Path) -> Path:
     """Find the typedframes checker binary (release or debug)."""
-    binary_path = (
-            project_root / "typedframes-checker" / "rust_typedframes_checker" / "target" / "release" / "typedframes_checker"
-    )
+    binary_path = project_root / "rust" / "target" / "release" / "typedframes_checker"
     if not binary_path.exists():
-        binary_path = (
-                project_root
-                / "typedframes-checker"
-                / "rust_typedframes_checker"
-                / "target"
-                / "debug"
-                / "typedframes_checker"
-        )
+        binary_path = project_root / "rust" / "target" / "debug" / "typedframes_checker"
     return binary_path
 
 
@@ -407,7 +398,7 @@ def _create_mypy_config(*, with_plugin: bool = False) -> Path:
     config_path.parent.mkdir(parents=True, exist_ok=True)
     lines = ["[mypy]", "ignore_missing_imports = True", "no_incremental = True"]
     if with_plugin:
-        lines.append("plugins = typedframes_checker.mypy")
+        lines.append("plugins = typedframes.mypy")
     config_path.write_text("\n".join(lines) + "\n")
     return config_path
 

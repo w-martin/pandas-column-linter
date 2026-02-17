@@ -4,7 +4,7 @@ import subprocess
 import unittest
 from pathlib import Path
 
-from typedframes_checker._rust_checker import check_file  # ty: ignore[unresolved-import]
+from typedframes._rust_checker import check_file  # ty: ignore[unresolved-import]
 
 
 class TestTypedFramesCheckerIntegration(unittest.TestCase):
@@ -13,7 +13,7 @@ class TestTypedFramesCheckerIntegration(unittest.TestCase):
     def test_should_detect_missing_column(self) -> None:
         """Test that the checker detects missing columns."""
         # arrange
-        sut = Path("typedframes-checker/rust_typedframes_checker/target/debug/typedframes_checker").absolute()
+        sut = Path("rust/target/debug/typedframes_checker").absolute()
         example_file = Path("examples/typedframes_example.py").absolute()
 
         # act
@@ -30,7 +30,7 @@ class TestTypedFramesCheckerIntegration(unittest.TestCase):
     def test_should_suggest_typo_correction(self) -> None:
         """Test that the checker suggests corrections for typos."""
         # arrange
-        sut = Path("typedframes-checker/rust_typedframes_checker/target/debug/typedframes_checker").absolute()
+        sut = Path("rust/target/debug/typedframes_checker").absolute()
         example_file = Path("examples/typedframes_example.py").absolute()
 
         # act
@@ -47,7 +47,7 @@ class TestTypedFramesCheckerIntegration(unittest.TestCase):
     def test_should_track_mutations(self) -> None:
         """Test that the checker tracks column mutations."""
         # arrange
-        sut = Path("typedframes-checker/rust_typedframes_checker/target/debug/typedframes_checker").absolute()
+        sut = Path("rust/target/debug/typedframes_checker").absolute()
         example_file = Path("examples/typedframes_example.py").absolute()
 
         # act

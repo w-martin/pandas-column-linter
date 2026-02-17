@@ -1,5 +1,11 @@
 # typedframes
 
+> ⚠️ **Project Status: Proof of Concept**
+>
+> `typedframes` (v0.1.0) is currently an experimental proof-of-concept. The core static analysis and mypy/Rust
+> integrations work, but expect rough edges. The codebase prioritizes demonstrating the viability of static DataFrame
+> schema validation over production-grade stability.
+>
 **Static analysis for pandas and polars DataFrames. Catch column errors at lint-time, not runtime.**
 
 ```python
@@ -69,11 +75,7 @@ or
 uv add typedframes
 ```
 
-For static analysis (`typedframes check`), also install the checker (Rust-based, installed separately like type stubs):
-
-```shell
-pip install typedframes-checker
-```
+The Rust-based checker is included — no separate install needed.
 
 ---
 
@@ -192,11 +194,11 @@ typedframes check src/ --json
 ```shell
 # Add to pyproject.toml
 [tool.mypy]
-plugins = ["typedframes_checker.mypy"]
+plugins = ["typedframes.mypy"]
 
 # Or mypy.ini
 [mypy]
-plugins = typedframes_checker.mypy
+plugins = typedframes.mypy
 
 # Run mypy
 mypy src/
