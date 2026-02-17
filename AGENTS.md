@@ -46,10 +46,6 @@
 - `uv run inv all` - Full check suite
 - In `tasks.py`, don't prefix commands with `uv run` — invoke already runs inside the uv environment
 
-## Instruction File Sync
-
-- When updating this file (`CLAUDE.md`), also apply the same changes to `.github/copilot-instructions.md`
-
 ## Git Policy
 
 - Never run git commands (commit, stash, push, checkout, etc.) without explicit user request
