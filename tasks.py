@@ -42,11 +42,13 @@ def format_code(ctx: Context) -> None:
 
 @task
 def lint(ctx: Context) -> None:
-    """Run all linters: ruff check, ty check, bandit, complexipy, cargo clippy."""
+    """Run all linters: ruff check, ty check, bandit, complexipy, cargo fmt, cargo clippy."""
     ctx.run("ruff check .")
     ctx.run("ty check .")
     ctx.run("bandit -r src/ -c pyproject.toml")
     ctx.run("complexipy src/ --max-complexity-allowed 50")
+    print("Checking Rust formatting...")
+    ctx.run(f"cd {RUST_DIR} && cargo fmt --all -- --check")
     print("Running Rust clippy...")
     ctx.run(f"cd {RUST_DIR} && cargo clippy -- -D warnings")
 

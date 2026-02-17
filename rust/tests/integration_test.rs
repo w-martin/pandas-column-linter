@@ -91,9 +91,9 @@ def main():
         .message
         .contains("Column 'email' does not exist in UserSchema")));
     // user_email should be valid
-    assert!(!errors.iter().any(|e| e
-        .message
-        .contains("Column 'user_email' does not exist")));
+    assert!(!errors
+        .iter()
+        .any(|e| e.message.contains("Column 'user_email' does not exist")));
 }
 
 #[test]
@@ -125,9 +125,9 @@ def main():
     assert!(errors.iter().any(|e| e
         .message
         .contains("Column 'temp_4' does not exist in SensorSchema")));
-    assert!(!errors.iter().any(|e| e
-        .message
-        .contains("Column 'temp_1' does not exist")));
+    assert!(!errors
+        .iter()
+        .any(|e| e.message.contains("Column 'temp_1' does not exist")));
 }
 
 #[test]

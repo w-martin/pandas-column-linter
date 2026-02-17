@@ -132,12 +132,19 @@ output-format = "concise"
 unused-type-ignore-comment = "ignore"
 
 [[tool.ty.overrides]]
+include = ["src/typedframes/pandera.py"]
+
+[tool.ty.overrides.rules]
+possibly-missing-attribute = "ignore"
+
+[[tool.ty.overrides]]
 include = ["tests/**/*.py"]
 
 [tool.ty.overrides.rules]
 invalid-argument-type = "ignore"
 invalid-assignment = "ignore"
 unresolved-attribute = "ignore"
+possibly-missing-attribute = "ignore"
 unused-ignore-comment = "ignore"
 unused-type-ignore-comment = "ignore"
 
@@ -148,6 +155,7 @@ include = ["examples/*.py"]
 unused-ignore-comment = "ignore"
 invalid-type-form = "ignore"
 invalid-argument-type = "ignore"
+possibly-missing-attribute = "ignore"
 
 [[tool.ty.overrides]]
 include = ["benchmarks/**/*.py"]

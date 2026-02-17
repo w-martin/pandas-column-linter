@@ -90,25 +90,122 @@ pub fn find_project_root(start_path: &Path) -> PathBuf {
 
 /// Reserved pandas/polars method names that shouldn't be used as column names
 const RESERVED_METHODS: &[&str] = &[
-    "shape", "columns", "index", "iloc", "loc", "head", "tail",
-    "describe", "info", "set_index", "merge", "concat", "join",
-    "filter", "select", "with_columns", "group_by", "groupby",
-    "agg", "sort", "sort_values", "drop", "rename", "apply",
-    "map", "pipe", "transform", "to_pandas", "to_df", "schema",
-    "dtypes", "dtype", "cast", "lazy", "collect", "to_dict",
-    "to_list", "to_numpy", "to_arrow", "write_csv", "write_parquet",
-    "clone", "clear", "extend", "insert", "item", "n_chunks",
-    "null_count", "estimated_size", "width", "height", "rows",
-    "row", "get_column", "get_columns", "explode", "unnest",
-    "pivot", "unpivot", "melt", "sample", "slice", "limit",
-    "unique", "n_unique", "value_counts", "is_empty", "is_duplicated",
-    "unique_counts", "mean", "sum", "min", "max", "std", "var",
-    "median", "quantile", "fill_null", "fill_nan", "interpolate",
-    "shift", "diff", "pct_change", "rolling", "ewm", "count",
-    "first", "last", "len", "all", "any", "copy", "values",
-    "T", "axes", "empty", "ndim", "size", "keys", "items",
-    "pop", "update", "get", "add", "sub", "mul", "div", "mod",
-    "pow", "abs", "round", "floor", "ceil", "clip", "corr", "cov",
+    "shape",
+    "columns",
+    "index",
+    "iloc",
+    "loc",
+    "head",
+    "tail",
+    "describe",
+    "info",
+    "set_index",
+    "merge",
+    "concat",
+    "join",
+    "filter",
+    "select",
+    "with_columns",
+    "group_by",
+    "groupby",
+    "agg",
+    "sort",
+    "sort_values",
+    "drop",
+    "rename",
+    "apply",
+    "map",
+    "pipe",
+    "transform",
+    "to_pandas",
+    "to_df",
+    "schema",
+    "dtypes",
+    "dtype",
+    "cast",
+    "lazy",
+    "collect",
+    "to_dict",
+    "to_list",
+    "to_numpy",
+    "to_arrow",
+    "write_csv",
+    "write_parquet",
+    "clone",
+    "clear",
+    "extend",
+    "insert",
+    "item",
+    "n_chunks",
+    "null_count",
+    "estimated_size",
+    "width",
+    "height",
+    "rows",
+    "row",
+    "get_column",
+    "get_columns",
+    "explode",
+    "unnest",
+    "pivot",
+    "unpivot",
+    "melt",
+    "sample",
+    "slice",
+    "limit",
+    "unique",
+    "n_unique",
+    "value_counts",
+    "is_empty",
+    "is_duplicated",
+    "unique_counts",
+    "mean",
+    "sum",
+    "min",
+    "max",
+    "std",
+    "var",
+    "median",
+    "quantile",
+    "fill_null",
+    "fill_nan",
+    "interpolate",
+    "shift",
+    "diff",
+    "pct_change",
+    "rolling",
+    "ewm",
+    "count",
+    "first",
+    "last",
+    "len",
+    "all",
+    "any",
+    "copy",
+    "values",
+    "T",
+    "axes",
+    "empty",
+    "ndim",
+    "size",
+    "keys",
+    "items",
+    "pop",
+    "update",
+    "get",
+    "add",
+    "sub",
+    "mul",
+    "div",
+    "mod",
+    "pow",
+    "abs",
+    "round",
+    "floor",
+    "ceil",
+    "clip",
+    "corr",
+    "cov",
 ];
 
 fn levenshtein(a: &str, b: &str) -> usize {
@@ -160,7 +257,7 @@ pub struct LintError {
 pub struct Linter {
     schemas: HashMap<String, Vec<String>>,
     variables: HashMap<String, (String, usize)>, // var_name -> (schema_name, defined_at_line)
-    functions: HashMap<String, String>,           // func_name -> schema_name (from return type)
+    functions: HashMap<String, String>,          // func_name -> schema_name (from return type)
     line_index: Option<LineIndex>,
     source: String,
 }
@@ -311,7 +408,11 @@ impl Linter {
                                                     if keyword.arg.as_ref().map(|s| s.as_str())
                                                         == Some("alias")
                                                     {
-                                                        if let Some(s) = Self::extract_string_literal(&keyword.value) {
+                                                        if let Some(s) =
+                                                            Self::extract_string_literal(
+                                                                &keyword.value,
+                                                            )
+                                                        {
                                                             alias = Some(s.to_string());
                                                         }
                                                     }
@@ -328,7 +429,9 @@ impl Linter {
                                                     {
                                                         if let Expr::List(list) = &keyword.value {
                                                             for el in &list.elts {
-                                                                if let Some(s) = Self::extract_string_literal(el) {
+                                                                if let Some(s) =
+                                                                    Self::extract_string_literal(el)
+                                                                {
                                                                     columns.push(s.to_string());
                                                                 } else if let Expr::Name(n) = el {
                                                                     columns.push(n.id.to_string());
@@ -364,7 +467,11 @@ impl Linter {
                                                     if keyword.arg.as_ref().map(|s| s.as_str())
                                                         == Some("alias")
                                                     {
-                                                        if let Some(s) = Self::extract_string_literal(&keyword.value) {
+                                                        if let Some(s) =
+                                                            Self::extract_string_literal(
+                                                                &keyword.value,
+                                                            )
+                                                        {
                                                             alias = Some(s.to_string());
                                                         }
                                                     }
@@ -381,7 +488,9 @@ impl Linter {
                                                     {
                                                         if let Expr::List(list) = &keyword.value {
                                                             for el in &list.elts {
-                                                                if let Some(s) = Self::extract_string_literal(el) {
+                                                                if let Some(s) =
+                                                                    Self::extract_string_literal(el)
+                                                                {
                                                                     columns.push(s.to_string());
                                                                 } else if let Expr::Name(n) = el {
                                                                     columns.push(n.id.to_string());
@@ -441,7 +550,9 @@ impl Linter {
                     if let Expr::Subscript(subscript) = target {
                         if let Expr::Name(name) = &*subscript.value {
                             if let Some((schema_name, _)) = self.variables.get(name.id.as_str()) {
-                                if let Some(col_name) = Self::extract_string_literal(&subscript.slice) {
+                                if let Some(col_name) =
+                                    Self::extract_string_literal(&subscript.slice)
+                                {
                                     let schema_name = schema_name.clone();
                                     if let Some(columns) = self.schemas.get_mut(&schema_name) {
                                         if !columns.iter().any(|c| c == col_name) {
@@ -472,7 +583,8 @@ impl Linter {
                                         self.variables.get(left_name.id.as_str())
                                     {
                                         if !call.arguments.args.is_empty() {
-                                            if let Expr::Name(right_name) = &call.arguments.args[0] {
+                                            if let Expr::Name(right_name) = &call.arguments.args[0]
+                                            {
                                                 if let Some((right_schema, _)) =
                                                     self.variables.get(right_name.id.as_str())
                                                 {
@@ -506,7 +618,14 @@ impl Linter {
                                         }
                                     }
                                 }
-                            } else if func_name == "from_schema" || func_name == "from_pandas" || func_name == "from_polars" || func_name == "read_csv" || func_name == "read_parquet" || func_name == "read_json" || func_name == "read_excel" {
+                            } else if func_name == "from_schema"
+                                || func_name == "from_pandas"
+                                || func_name == "from_polars"
+                                || func_name == "read_csv"
+                                || func_name == "read_parquet"
+                                || func_name == "read_json"
+                                || func_name == "read_excel"
+                            {
                                 // PandasFrame.from_schema(df, Schema) or Schema.from_pandas(df)
                                 if let Expr::Attribute(inner_attr) = &*attr.value {
                                     // This is like PandasFrame.from_schema
@@ -514,12 +633,16 @@ impl Linter {
                                     if class_name == "PandasFrame" || class_name == "PolarsFrame" {
                                         // Find the schema argument
                                         if call.arguments.args.len() >= 2 {
-                                            if let Expr::Name(schema_name) = &call.arguments.args[1] {
+                                            if let Expr::Name(schema_name) = &call.arguments.args[1]
+                                            {
                                                 for target in &assign.targets {
                                                     if let Expr::Name(target_name) = target {
                                                         self.variables.insert(
                                                             target_name.id.to_string(),
-                                                            (schema_name.id.to_string(), current_line),
+                                                            (
+                                                                schema_name.id.to_string(),
+                                                                current_line,
+                                                            ),
                                                         );
                                                     }
                                                 }
@@ -561,11 +684,10 @@ impl Linter {
                                                 Some((schemas[0].clone(), schemas[1].clone()));
                                         }
                                     }
-                                } else if let Some(keyword) = call
-                                    .arguments
-                                    .keywords
-                                    .iter()
-                                    .find(|k| k.arg.as_ref().map(|s| s.as_str()) == Some("objs"))
+                                } else if let Some(keyword) =
+                                    call.arguments.keywords.iter().find(|k| {
+                                        k.arg.as_ref().map(|s| s.as_str()) == Some("objs")
+                                    })
                                 {
                                     if let Expr::List(list) = &keyword.value {
                                         let mut schemas = Vec::new();
@@ -620,7 +742,10 @@ impl Linter {
                     if let Expr::Subscript(subscript) = &*call.func {
                         if let Expr::Name(name) = &*subscript.value {
                             let type_name = name.id.as_str();
-                            if type_name == "DataFrame" || type_name == "PandasFrame" || type_name == "PolarsFrame" {
+                            if type_name == "DataFrame"
+                                || type_name == "PandasFrame"
+                                || type_name == "PolarsFrame"
+                            {
                                 if let Expr::Name(schema_name) = &*subscript.slice {
                                     for target in &assign.targets {
                                         if let Expr::Name(target_name) = target {
@@ -677,7 +802,10 @@ impl Linter {
                         if let Expr::Subscript(subscript) = &*call.func {
                             if let Expr::Name(name) = &*subscript.value {
                                 let type_name = name.id.as_str();
-                                if type_name == "DataFrame" || type_name == "PandasFrame" || type_name == "PolarsFrame" {
+                                if type_name == "DataFrame"
+                                    || type_name == "PandasFrame"
+                                    || type_name == "PolarsFrame"
+                                {
                                     if let Expr::Name(schema_name) = &*subscript.slice {
                                         if let Expr::Name(target_name) = &*ann_assign.target {
                                             self.variables.insert(
@@ -718,7 +846,8 @@ impl Linter {
 
                         if let Some(name) = type_name {
                             // DataFrame[Schema], PandasFrame[Schema], PolarsFrame[Schema]
-                            if name == "DataFrame" || name == "PandasFrame" || name == "PolarsFrame" {
+                            if name == "DataFrame" || name == "PandasFrame" || name == "PolarsFrame"
+                            {
                                 if let Expr::Name(schema_name) = &*subscript.slice {
                                     if let Expr::Name(target_name) = &*ann_assign.target {
                                         self.variables.insert(
@@ -734,7 +863,9 @@ impl Linter {
                                         let mut is_dataframe = false;
                                         if let Expr::Name(first) = &tuple.elts[0] {
                                             let first_name = first.id.as_str();
-                                            if first_name == "DataFrame" || first_name.contains("DataFrame") {
+                                            if first_name == "DataFrame"
+                                                || first_name.contains("DataFrame")
+                                            {
                                                 is_dataframe = true;
                                             }
                                         } else if let Expr::Attribute(first_attr) = &tuple.elts[0] {
@@ -744,7 +875,8 @@ impl Linter {
                                         }
                                         if is_dataframe {
                                             if let Expr::Name(schema_name) = &tuple.elts[1] {
-                                                if let Expr::Name(target_name) = &*ann_assign.target {
+                                                if let Expr::Name(target_name) = &*ann_assign.target
+                                                {
                                                     self.variables.insert(
                                                         target_name.id.to_string(),
                                                         (schema_name.id.to_string(), current_line),
@@ -776,7 +908,12 @@ impl Linter {
         }
     }
 
-    fn parse_quoted_type_hint(&mut self, s: &str, ann_assign: &ast::StmtAnnAssign, current_line: usize) {
+    fn parse_quoted_type_hint(
+        &mut self,
+        s: &str,
+        ann_assign: &ast::StmtAnnAssign,
+        current_line: usize,
+    ) {
         // Handle patterns like "DataFrame[Schema]", "PandasFrame[Schema]", "PolarsFrame[Schema]"
         // and "Annotated[DataFrame, Schema]", "Annotated[pl.DataFrame, Schema]"
 
@@ -787,7 +924,11 @@ impl Linter {
                     if let Some(end) = s.rfind(']') {
                         let schema_name = &s[start + 1..end];
                         // Handle nested generics by taking the last part
-                        let schema = schema_name.split(',').next_back().unwrap_or(schema_name).trim();
+                        let schema = schema_name
+                            .split(',')
+                            .next_back()
+                            .unwrap_or(schema_name)
+                            .trim();
                         if let Expr::Name(target_name) = &*ann_assign.target {
                             self.variables.insert(
                                 target_name.id.to_string(),
@@ -840,11 +981,7 @@ impl Linter {
                                 if let Some(suggestion) = find_best_match(attr_name, columns) {
                                     message.push_str(&format!(" (did you mean '{}'?)", suggestion));
                                 }
-                                errors.push(LintError {
-                                    line,
-                                    col,
-                                    message,
-                                });
+                                errors.push(LintError { line, col, message });
                             }
                         }
                     }
@@ -858,23 +995,19 @@ impl Linter {
                         if let Some(columns) = self.schemas.get(schema_name) {
                             if let Some(col_name) = Self::extract_string_literal(&subscript.slice) {
                                 if !columns.iter().any(|c| c == col_name) {
-                                    let (line, col) = self.source_location(subscript.range().start());
+                                    let (line, col) =
+                                        self.source_location(subscript.range().start());
                                     let mut message = format!(
                                         "Column '{}' does not exist in {} (defined at line {})",
                                         col_name, schema_name, defined_line
                                     );
-                                    if let Some(suggestion) = find_best_match(col_name, columns)
-                                    {
+                                    if let Some(suggestion) = find_best_match(col_name, columns) {
                                         message.push_str(&format!(
                                             " (did you mean '{}'?)",
                                             suggestion
                                         ));
                                     }
-                                    errors.push(LintError {
-                                        line,
-                                        col,
-                                        message,
-                                    });
+                                    errors.push(LintError { line, col, message });
                                 }
                             }
                         }
@@ -1045,15 +1178,27 @@ print(df["emai"])
         assert!(is_enabled(root));
 
         // Case 2: pyproject.toml without tool section -> enabled by default
-        fs::write(root.join("pyproject.toml"), "[tool.something]\nenabled = false").unwrap();
+        fs::write(
+            root.join("pyproject.toml"),
+            "[tool.something]\nenabled = false",
+        )
+        .unwrap();
         assert!(is_enabled(root));
 
         // Case 3: pyproject.toml with tool.typedframes.enabled = false
-        fs::write(root.join("pyproject.toml"), "[tool.typedframes]\nenabled = false").unwrap();
+        fs::write(
+            root.join("pyproject.toml"),
+            "[tool.typedframes]\nenabled = false",
+        )
+        .unwrap();
         assert!(!is_enabled(root));
 
         // Case 4: pyproject.toml with tool.typedframes.enabled = true
-        fs::write(root.join("pyproject.toml"), "[tool.typedframes]\nenabled = true").unwrap();
+        fs::write(
+            root.join("pyproject.toml"),
+            "[tool.typedframes]\nenabled = true",
+        )
+        .unwrap();
         assert!(is_enabled(root));
     }
 
@@ -1087,7 +1232,9 @@ def func(): pass
 x = 1
 "#;
         let mut linter = Linter::new();
-        let errors = linter.check_file_internal(source, Path::new("test.py")).unwrap();
+        let errors = linter
+            .check_file_internal(source, Path::new("test.py"))
+            .unwrap();
         assert!(errors.is_empty());
     }
 }

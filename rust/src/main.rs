@@ -1,6 +1,6 @@
+use _rust_checker::{find_project_root, is_enabled, Linter};
 use anyhow::Context;
 use anyhow::Result;
-use _rust_checker::{find_project_root, is_enabled, Linter};
 use std::env;
 use std::fs;
 use std::path::Path;
