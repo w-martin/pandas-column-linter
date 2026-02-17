@@ -34,6 +34,12 @@ def build(ctx: Context, *, force: bool = False) -> None:
         print("Rust checker is up to date.")
 
 
+@task(name="format-check")
+def check_if_code_needs_formatting(ctx: Context) -> None:
+    """Run ruff format on the codebase."""
+    ctx.run("ruff format --check")
+
+
 @task(name="format")
 def format_code(ctx: Context) -> None:
     """Run ruff format on the codebase."""
