@@ -1,4 +1,4 @@
-# Claude Code Instructions for typedframes
+# Instructions
 
 ## Package Structure
 

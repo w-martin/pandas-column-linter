@@ -20,15 +20,15 @@ jobs:
 
       - name: Rust format check
         run: cargo fmt --all -- --check
-        working-directory: rust_typedframes_checker
+        working-directory: rust
 
       - name: Rust lint
         run: cargo clippy -- -D warnings
-        working-directory: rust_typedframes_checker
+        working-directory: rust
 
       - name: Rust tests
         run: cargo test
-        working-directory: rust_typedframes_checker
+        working-directory: rust
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -50,7 +50,7 @@ jobs:
       - name: Python tests with coverage
         run: |
           # Build rust binary for integration tests
-          cd rust_typedframes_checker && cargo build && cd ..
+          cd rust && cargo build && cd ..
           PYTHONPATH=. pytest --cov-fail-under=90
 
   build_wheels:
@@ -85,7 +85,7 @@ jobs:
 
       - name: Build Rust binary
         run: |
-          cd rust_typedframes_checker
+          cd rust
           if [ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]; then
             cross build --release --target ${{ matrix.target }}
           else
@@ -104,9 +104,9 @@ jobs:
       - name: Build sdist and wheel
         run: |
           mkdir -p typedframes/bin
-          cp rust_typedframes_checker/target/${{ matrix.target }}/release/typedframes_checker* typedframes/bin/ || true
+          cp rust/target/${{ matrix.target }}/release/typedframes_checker* typedframes/bin/ || true
           if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            cp rust_typedframes_checker/target/${{ matrix.target }}/release/typedframes_checker.exe typedframes/bin/
+            cp rust/target/${{ matrix.target }}/release/typedframes_checker.exe typedframes/bin/
           fi
 
           # Use a platform-specific wheel tag if needed

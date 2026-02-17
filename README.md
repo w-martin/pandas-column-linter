@@ -118,13 +118,14 @@ def analyze(data: PandasFrame[SalesData]) -> float:
 
 # Standard pandas access still works
 filtered = df[df[SalesData.revenue] > 1000]
-grouped = df.groupby(SalesData.customer_id)[SalesData.revenue].sum()
+grouped = df.groupby(SalesData.customer_id)[str(SalesData.revenue)].sum()
 ```
 
 ### Use With Polars
 
 ```python
 from typedframes.polars import PolarsFrame
+import polars as pl
 
 # Load data with schema — one line
 df = PolarsFrame.read_csv("sales.csv", SalesData)
@@ -134,10 +135,10 @@ print(df.select(SalesData.revenue.col).sum())
 
 
 # Type-safe polars operations
-def analyze_polars(data: PolarsFrame[SalesData]) -> float:
+def analyze_polars(data: PolarsFrame[SalesData]) -> pl.DataFrame:
   data.select(SalesData.revenue.col)  # ✓ OK
   data.select(['profit'])  # ✗ Error at lint-time: 'profit' not in SalesData
-    return data.select(SalesData.revenue.col).mean()
+  return data.select(SalesData.revenue.col).mean()
 
 
 # Polars methods work as expected
@@ -158,7 +159,7 @@ typedframes provides **two ways** to check your code:
 typedframes check src/
 
 # Output:
-# ✓ Checked 47 files in 0.2s
+# ✓ Checked 47 files in 0.0s
 # ✗ src/analysis.py:23 - Column 'profit' not in SalesData
 # ✗ src/pipeline.py:56 - Column 'user_name' not in UserData
 ```
@@ -561,7 +562,7 @@ class UserOrders(UserPublic, Orders):
 
 
 # Or use the + operator
-UserOrders = UserPublic + Orders
+UserOrdersDynamic = UserPublic + Orders
 
 users: PandasFrame[UserPublic] = ...
 orders: PandasFrame[Orders] = ...
@@ -748,8 +749,8 @@ We believe static analysis catches bugs earlier and cheaper than runtime validat
 - ❌ Data quality monitoring (use Great Expectations)
 
 **Important:** `PandasFrame.from_schema()` is a *trust assertion*, not a validation step. It tells the type checker "
-this
-DataFrame conforms to this schema" without verifying the actual data. The linter catches mistakes in your code (wrong
+this DataFrame conforms to this schema" without verifying the actual data. The linter catches mistakes in your code (
+wrong
 column names, schema mismatches between functions), but it cannot verify that a CSV file contains the expected columns.
 For runtime validation of external data, use [`to_pandera_schema()`](#pandera-integration) to convert your typedframes
 schemas to Pandera schemas.
@@ -761,12 +762,14 @@ We use explicit `PandasFrame` and `PolarsFrame` types because:
 - Type safety requires knowing which methods are available
 - Being explicit prevents bugs
 
-**We reject:**
+**Trade-offs we avoid:**
 - ❌ "Universal DataFrame" abstractions (you lose features)
 - ❌ Implicit backend detection (runtime errors)
 - ❌ Lowest-common-denominator APIs
 
-The reason to choose polars over pandas is its lazy evaluation, native parallelism, and expressive query syntax. If you wrap it in an abstraction that only exposes shared features, you lose the advantages that made polars worthwhile. typedframes lets you use each library's full API while still getting schema-level type safety.
+The reason to choose polars over pandas is its lazy evaluation, native parallelism, and expressive query syntax.
+Abstraction layers often must expose a lowest-common-denominator API. By using explicit backend types instead,
+typedframes lets you use each library's full, native API while still getting schema-level type safety.
 
 ### Why Abstraction Layers Don't Solve Type Safety
 
@@ -830,8 +833,8 @@ MIT License - see [LICENSE](LICENSE)
 
 **Planned:**
 
-- [ ] **Optional runtime validation** - `Field` class with constraints (`gt`, `ge`, `lt`, `le`) on Column definitions,
-  opt-in validation at data load time
+- [ ] **Opt-in data loading constraints** - `Field` class with constraints (`gt`, `ge`, `lt`, `le`), strictly isolated
+  to `from_schema()` ingestion boundaries
 
 ---
 

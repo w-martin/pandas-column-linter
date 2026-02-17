@@ -106,6 +106,7 @@ dev = [
     "pyarrow>=23.0.0",
     "xlsxwriter>=3.2.9",
     "fastexcel>=0.19.0",
+    "pandas-stubs>=3.0.0.260204",
 ]
 
 [tool.bandit]
@@ -132,6 +133,8 @@ include = ["tests/**/*.py"]
 
 [tool.ty.overrides.rules]
 invalid-argument-type = "ignore"
+invalid-assignment = "ignore"
+unresolved-attribute = "ignore"
 unused-ignore-comment = "ignore"
 
 [[tool.ty.overrides]]
