@@ -148,9 +148,6 @@ class BaseSchema(metaclass=SchemaMeta):
         current_match: Column | ColumnSet | None,
     ) -> bool:
         """Check if column matches a ColumnSet. Returns True if matched."""
-        if not isinstance(cs.members, list):
-            return False
-
         matches = any(re.match(pattern, col_name) for pattern in cs.members) if cs.regex else col_name in cs.members
 
         if matches and consumed and not greedy:

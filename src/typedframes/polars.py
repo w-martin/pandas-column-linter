@@ -102,16 +102,18 @@ else:
             """
             Read a CSV file into a polars DataFrame.
 
-            The schema parameter documents the expected structure and enables
-            the static checker to validate column access.
+            The schema parameter is for typing and static checking only — it is not
+            validated or attached to the DataFrame at runtime. This method is a
+            pass-through to ``pl.read_csv``.
 
             Args:
                 source: File path or buffer to read from.
                 schema: Schema class describing the expected DataFrame structure.
+                    Used for static analysis only; ignored at runtime.
                 **kwargs: Additional arguments passed to ``pl.read_csv``.
 
             Returns:
-                A polars DataFrame. Annotate the result as ``PolarsFrame[Schema]``.
+                A plain polars DataFrame. Annotate the result as ``PolarsFrame[Schema]``.
 
             """
             import polars as pl
@@ -123,16 +125,18 @@ else:
             """
             Read a Parquet file into a polars DataFrame.
 
-            The schema parameter documents the expected structure and enables
-            the static checker to validate column access.
+            The schema parameter is for typing and static checking only — it is not
+            validated or attached to the DataFrame at runtime. This method is a
+            pass-through to ``pl.read_parquet``.
 
             Args:
                 source: File path or buffer to read from.
                 schema: Schema class describing the expected DataFrame structure.
+                    Used for static analysis only; ignored at runtime.
                 **kwargs: Additional arguments passed to ``pl.read_parquet``.
 
             Returns:
-                A polars DataFrame. Annotate the result as ``PolarsFrame[Schema]``.
+                A plain polars DataFrame. Annotate the result as ``PolarsFrame[Schema]``.
 
             """
             import polars as pl
@@ -144,16 +148,18 @@ else:
             """
             Read a JSON file into a polars DataFrame.
 
-            The schema parameter documents the expected structure and enables
-            the static checker to validate column access.
+            The schema parameter is for typing and static checking only — it is not
+            validated or attached to the DataFrame at runtime. This method is a
+            pass-through to ``pl.read_json``.
 
             Args:
                 source: File path or buffer to read from.
                 schema: Schema class describing the expected DataFrame structure.
+                    Used for static analysis only; ignored at runtime.
                 **kwargs: Additional arguments passed to ``pl.read_json``.
 
             Returns:
-                A polars DataFrame. Annotate the result as ``PolarsFrame[Schema]``.
+                A plain polars DataFrame. Annotate the result as ``PolarsFrame[Schema]``.
 
             """
             import polars as pl
@@ -165,16 +171,18 @@ else:
             """
             Read an Excel file into a polars DataFrame.
 
-            The schema parameter documents the expected structure and enables
-            the static checker to validate column access.
+            The schema parameter is for typing and static checking only — it is not
+            validated or attached to the DataFrame at runtime. This method is a
+            pass-through to ``pl.read_excel``.
 
             Args:
                 source: File path or buffer to read from.
                 schema: Schema class describing the expected DataFrame structure.
+                    Used for static analysis only; ignored at runtime.
                 **kwargs: Additional arguments passed to ``pl.read_excel``.
 
             Returns:
-                A polars DataFrame. Annotate the result as ``PolarsFrame[Schema]``.
+                A plain polars DataFrame. Annotate the result as ``PolarsFrame[Schema]``.
 
             """
             import polars as pl
@@ -182,4 +190,6 @@ else:
             return pl.read_excel(source, **kwargs)
 
 
+# Prefer ``Annotated[pl.DataFrame, Schema]`` for direct type annotations.
+# ``PolarsFrame[Schema]`` is a convenience alias that expands to the same thing at runtime.
 __all__ = ["PolarsFrame"]

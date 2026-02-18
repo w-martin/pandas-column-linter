@@ -157,9 +157,9 @@ def get_tool_version(cmd: list[str], tool_name_override: str | None = None) -> s
                 check=False,
             )
             version = result.stdout.strip()
-            return version or "0.1.0"
+            return version or "0.1.1"
         except (subprocess.TimeoutExpired, FileNotFoundError):
-            return "0.1.0"
+            return "0.1.1"
 
     try:
         result = subprocess.run(

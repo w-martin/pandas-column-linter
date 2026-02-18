@@ -67,14 +67,12 @@ def to_pandera_schema(schema: type[BaseSchema]) -> pa.DataFrameSchema:
 
     for cs in schema.column_sets().values():
         dtype = _map_dtype(cs.type)
-        if cs.regex and isinstance(cs.members, list):
+        if cs.regex:
             for pattern in cs.members:
                 columns[pattern] = pa.Column(dtype=dtype, nullable=False, regex=True)
-        elif isinstance(cs.members, list):
+        else:
             for member in cs.members:
                 columns[member] = pa.Column(dtype=dtype, nullable=False)
-        else:
-            columns[cs.members] = pa.Column(dtype=dtype, nullable=False)
 
     strict = not schema.allow_extra_columns
 

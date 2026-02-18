@@ -134,5 +134,5 @@ jobs:
 
       - name: Run tests against published package
         run: |
-          rm -rf src
+          rm -rf src pyproject.toml
           pytest tests/integration/

@@ -2,7 +2,7 @@
 
 > ⚠️ **Project Status: Proof of Concept**
 >
-> `typedframes` (v0.1.0) is currently an experimental proof-of-concept. The core static analysis and mypy/Rust
+> `typedframes` (v0.1.1) is currently an experimental proof-of-concept. The core static analysis and mypy/Rust
 > integrations work, but expect rough edges. The codebase prioritizes demonstrating the viability of static DataFrame
 > schema validation over production-grade stability.
 >
@@ -226,7 +226,7 @@ Fast feedback reduces development time. The typedframes Rust binary provides nea
 
 | Tool               | Version | What it does                  | typedframes (11 files) | great_expectations (490 files) |
 |--------------------|---------|-------------------------------|------------------------|--------------------------------|
-| typedframes        | 0.1.0   | DataFrame column checker      | 961µs ±56µs            | 930µs ±89µs                    |
+| typedframes        | 0.1.1   | DataFrame column checker      | 961µs ±56µs            | 930µs ±89µs                    |
 | ruff               | 0.15.0  | Linter (no type checking)     | 39ms ±12ms             | 360ms ±18ms                    |
 | ty                 | 0.0.16  | Type checker                  | 146ms ±13ms            | 1.65s ±26ms                    |
 | pyrefly            | 0.52.0  | Type checker                  | 152ms ±7ms             | 693ms ±33ms                    |
@@ -256,7 +256,7 @@ Comprehensive comparison of pandas/DataFrame typing and validation tools. **type
 
 | Feature                         | typedframes            | Pandera     | Great Expectations | strictly_typed_pandas | pandas-stubs | dataenforce | pandas-type-checks | StaticFrame      | narwhals |
 |---------------------------------|------------------------|-------------|--------------------|-----------------------|--------------|-------------|--------------------|------------------|----------|
-| **Version tested**              | 0.1.0                  | 0.29.0      | 1.4.3              | 0.3.6                 | 3.0.0        | 0.1.2       | 1.1.3              | 3.7.0            | 2.16.0   |
+| **Version tested**              | 0.1.1                  | 0.29.0      | 1.4.3              | 0.3.6                 | 3.0.0        | 0.1.2       | 1.1.3              | 3.7.0            | 2.16.0   |
 | **Analysis Type**               |
 | When errors are caught          | **Static (lint-time)** | Runtime     | Runtime            | Static + Runtime      | Static       | Runtime     | Runtime            | Static + Runtime | Runtime  |
 | **Static Analysis (our focus)** |

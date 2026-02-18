@@ -73,10 +73,17 @@ class TestColumnSet(unittest.TestCase):
 
         self.assertIn("regex", str(context.exception))
 
+    def test_should_normalize_single_string_member_to_list(self) -> None:
+        """Test that a single string member is normalized to a list by __post_init__."""
+        # arrange/act
+        sut = ColumnSet(members="single_col", type=float, regex=False)
+
+        # assert
+        self.assertEqual(sut.members, ["single_col"])
+
     def test_should_return_polars_expression_for_single_string_member(self) -> None:
-        """Test that cols() handles a single string member (non-regex, non-list)."""
-        # arrange — construct ColumnSet with string member, regex=False
-        # __post_init__ only normalizes when regex=True, so str stays as str
+        """Test that cols() handles a single string member normalized to a list."""
+        # arrange
         sut = ColumnSet(members="single_col", type=float, regex=False)
 
         # act

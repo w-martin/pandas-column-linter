@@ -138,19 +138,19 @@ class TestColumnGroup(unittest.TestCase):
         # assert — only the Column is processed, the string is skipped
         self.assertEqual(result, ["user_id"])
 
-    def test_should_get_column_names_from_string_member_column_set(self) -> None:
-        """Test that get_column_names handles ColumnSet with string members (non-list)."""
-        # arrange — ColumnSet with string member, not regex, no consumed_map
+    def test_should_get_column_names_from_single_string_member_column_set(self) -> None:
+        """Test that get_column_names handles a ColumnSet constructed with a single string member."""
+        # arrange — ColumnSet with string member is normalized to a list by __post_init__
         cs = ColumnSet(members="single_col", type=float, regex=False)
         cs.__set_name__(None, "readings")
         sut = ColumnGroup(members=[cs])
         sut.__set_name__(None, "all_readings")
 
-        # act — consumed_map doesn't have this cs, and members is a string not a list
+        # act
         result = sut.get_column_names()
 
-        # assert — string member cannot be iterated via extend, so it's skipped
-        self.assertEqual(result, [])
+        # assert — normalized to ["single_col"], so column is included
+        self.assertEqual(result, ["single_col"])
 
     def test_should_return_polars_expressions_with_consumed_map(self) -> None:
         """Test that cols() uses consumed_map for ColumnSets."""

@@ -275,20 +275,22 @@ class TestBaseSchema(unittest.TestCase):
         # assert
         self.assertIs(result, df)
 
-    def test_should_handle_non_list_members_in_match_column_to_set(self) -> None:
-        """Test that _match_column_to_set returns False when members is not a list."""
+    def test_should_match_single_string_column_set_in_column_map(self) -> None:
+        """Test that a single-string ColumnSet (non-regex) matches correctly in compute_column_map."""
 
         # arrange
         class TestSchema(BaseSchema):
             readings = ColumnSet(members="single_col", type=float, regex=False)
 
-        cs = TestSchema.column_sets()["readings"]
+        df_columns = ["single_col", "other"]
 
         # act
-        result = TestSchema._match_column_to_set("single_col", cs, consumed=False, greedy=False, current_match=None)
+        type_map, consumed_map = TestSchema.compute_column_map(df_columns)
 
         # assert
-        self.assertFalse(result)
+        self.assertEqual(type_map["single_col"], float)
+        self.assertNotIn("other", type_map)
+        self.assertEqual(consumed_map["readings"], ["single_col"])
 
     def test_should_validate_extra_columns_with_regex_match(self) -> None:
         """Test that regex-matched columns trigger the is_matched=True/break path."""

@@ -18,7 +18,8 @@ class ColumnSet:
     such as time series data or multi-dimensional measurements.
 
     Attributes:
-        members: List of column names, or a regex pattern if regex=True.
+        members: List of column names (or a single name as a string, which is normalized to a
+            single-element list). When regex=True, each string is treated as a regex pattern.
         type: The Python type shared by all columns in the set.
         regex: If True, members is treated as a regex pattern for matching column names.
         description: Human-readable description of the column set's purpose.
@@ -33,15 +34,15 @@ class ColumnSet:
 
     """
 
-    members: list[str] | str
+    members: list[str]
     type: type = Any
     regex: bool = False
     description: str = ""
     name: str = field(default="", init=False)
 
     def __post_init__(self) -> None:
-        """Normalize regex member to a list."""
-        if self.regex and isinstance(self.members, str):
+        """Normalize members to a list."""
+        if isinstance(self.members, str):
             self.members = [self.members]
 
     def __set_name__(self, owner: type, name: str) -> None:
@@ -77,8 +78,5 @@ class ColumnSet:
         if self.regex:
             msg = "Cannot get column expressions for regex members without matched_columns"
             raise ValueError(msg)
-
-        if isinstance(self.members, str):
-            return [pl.col(self.members)]
 
         return [pl.col(c) for c in self.members]
