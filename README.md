@@ -2,7 +2,7 @@
 
 > ⚠️ **Project Status: Proof of Concept**
 >
-> `typedframes` (v0.1.1) is currently an experimental proof-of-concept. The core static analysis and mypy/Rust
+> `typedframes` (v0.1.2) is currently an experimental proof-of-concept. The core static analysis and mypy/Rust
 > integrations work, but expect rough edges. The codebase prioritizes demonstrating the viability of static DataFrame
 > schema validation over production-grade stability.
 >
@@ -180,7 +180,7 @@ typedframes check src/
 # Check specific files
 typedframes check src/pipeline.py
 
-# Check directory
+# Check directory (builds cross-file index automatically)
 typedframes check src/
 
 # Fail on any error (for CI)
@@ -188,6 +188,9 @@ typedframes check src/ --strict
 
 # JSON output
 typedframes check src/ --json
+
+# Skip cross-file index (single-file mode, faster for quick checks)
+typedframes check src/ --no-index
 ```
 
 ### Option 2: Mypy Plugin (Comprehensive)
@@ -226,7 +229,7 @@ Fast feedback reduces development time. The typedframes Rust binary provides nea
 
 | Tool               | Version | What it does                  | typedframes (11 files) | great_expectations (490 files) |
 |--------------------|---------|-------------------------------|------------------------|--------------------------------|
-| typedframes        | 0.1.1   | DataFrame column checker      | 961µs ±56µs            | 930µs ±89µs                    |
+| typedframes        | 0.1.2   | DataFrame column checker      | 961µs ±56µs            | 930µs ±89µs                    |
 | ruff               | 0.15.0  | Linter (no type checking)     | 39ms ±12ms             | 360ms ±18ms                    |
 | ty                 | 0.0.16  | Type checker                  | 146ms ±13ms            | 1.65s ±26ms                    |
 | pyrefly            | 0.52.0  | Type checker                  | 152ms ±7ms             | 693ms ±33ms                    |
@@ -236,8 +239,10 @@ Fast feedback reduces development time. The typedframes Rust binary provides nea
 
 *Run `uv run python benchmarks/benchmark_checkers.py` to reproduce.*
 
-The typedframes binary performs lexical column name resolution within a single file. It does not perform cross-file type
-inference. Full type checkers (mypy, pyright, ty) analyze all Python types across your entire codebase. Use both: the
+The typedframes binary resolves column names within a file and, when a project index is present, across files too.
+Run `typedframes check src/` to build the index automatically and catch errors like `df = load_users(); df["typo"]`
+even when `load_users` is defined in another module. Pass `--no-index` to skip the index and check each file in
+isolation. Full type checkers (mypy, pyright, ty) analyze all Python types across your entire codebase. Use both: the
 binary for fast iteration, mypy for comprehensive checking.
 
 The standalone checker is built with [`ruff_python_parser`](https://github.com/astral-sh/ruff) for Python AST
@@ -256,7 +261,7 @@ Comprehensive comparison of pandas/DataFrame typing and validation tools. **type
 
 | Feature                         | typedframes            | Pandera     | Great Expectations | strictly_typed_pandas | pandas-stubs | dataenforce | pandas-type-checks | StaticFrame      | narwhals |
 |---------------------------------|------------------------|-------------|--------------------|-----------------------|--------------|-------------|--------------------|------------------|----------|
-| **Version tested**              | 0.1.1                  | 0.29.0      | 1.4.3              | 0.3.6                 | 3.0.0        | 0.1.2       | 1.1.3              | 3.7.0            | 2.16.0   |
+| **Version tested**              | 0.1.2                  | 0.29.0      | 1.4.3              | 0.3.6                 | 3.0.0        | 0.1.2       | 1.1.3              | 3.7.0            | 2.16.0   |
 | **Analysis Type**               |
 | When errors are caught          | **Static (lint-time)** | Runtime     | Runtime            | Static + Runtime      | Static       | Runtime     | Runtime            | Static + Runtime | Runtime  |
 | **Static Analysis (our focus)** |
@@ -830,6 +835,7 @@ MIT License - see [LICENSE](LICENSE)
 - [x] Schema Composition (multiple inheritance, `SchemaA + SchemaB`)
 - [x] Column name collision warnings
 - [x] Pandera integration (`to_pandera_schema()`)
+- [x] Cross-file schema inference (project-level index, `--no-index` flag)
 
 **Planned:**
 

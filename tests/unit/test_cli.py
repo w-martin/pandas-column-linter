@@ -239,3 +239,49 @@ class TestCli(unittest.TestCase):
             # assert
             output = captured.getvalue()
             self.assertIn("\u2713 Checked 2 files", output)
+
+    def test_should_check_directory_with_no_index(self) -> None:
+        """Test that --no-index skips building the project index."""
+        # arrange
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "a.py").write_text("x = 1\n")
+
+            captured = StringIO()
+
+            # act
+            with patch("sys.stdout", captured):
+                main(["check", str(root), "--no-index"])
+
+            # assert
+            output = captured.getvalue()
+            self.assertIn("\u2713 Checked 1 file", output)
+
+    def test_should_not_crash_when_checker_not_installed_on_directory(self) -> None:
+        """Test that a missing Rust extension when checking a directory exits with code 1."""
+        # arrange
+        original_import = builtins.__import__
+
+        def mock_import(name: str, *args: object, **kwargs: object) -> object:
+            if name == "typedframes._rust_checker":
+                raise ImportError(name)
+            return original_import(name, *args, **kwargs)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            py_file = Path(tmpdir) / "test.py"
+            py_file.write_text("x = 1\n")
+
+            captured = StringIO()
+
+            # act / assert
+            with (
+                patch("builtins.__import__", side_effect=mock_import),
+                patch("sys.stderr", captured),
+                self.assertRaises(SystemExit) as ctx,
+            ):
+                main(["check", str(tmpdir)])
+
+            self.assertEqual(ctx.exception.code, 1)
+            self.assertIn("Rust checker extension was not found", captured.getvalue())

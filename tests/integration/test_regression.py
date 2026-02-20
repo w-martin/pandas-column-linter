@@ -1,6 +1,8 @@
 """Regression tests for typedframes mypy plugin integration."""
 
+import tempfile
 import unittest
+from pathlib import Path
 
 from mypy.api import run as mypy_run
 
@@ -50,9 +52,23 @@ class TestPluginRegression(unittest.TestCase):
         """Test that mypy with the plugin catches column errors."""
         # arrange
         test_file = "tests/fixtures/missing_column.py"
+        config = "[mypy]\nplugins = typedframes.mypy\nignore_missing_imports = True\n"
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
+            f.write(config)
+            cfg_path = f.name
 
-        # act - run mypy with pyproject.toml config (includes plugin)
-        stdout, _stderr, exit_code = mypy_run([test_file])
+        try:
+            # act - run mypy with plugin configured via temp config (avoids relying on pyproject.toml)
+            stdout, _stderr, exit_code = mypy_run(
+                [
+                    "--no-error-summary",
+                    "--config-file",
+                    cfg_path,
+                    test_file,
+                ]
+            )
+        finally:
+            Path(cfg_path).unlink()
 
         # assert
         self.assertIn("Column 'non_existent' does not exist in UserSchema", stdout)

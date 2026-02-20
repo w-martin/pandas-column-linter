@@ -3,13 +3,15 @@ use ruff_python_ast::{self as ast, Expr, Stmt};
 use ruff_python_parser::parse_module;
 use ruff_source_file::{LineIndex, SourceCode};
 use ruff_text_size::Ranged;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::UNIX_EPOCH;
 
 #[pyfunction]
-fn check_file(file_path: String) -> PyResult<String> {
+#[pyo3(signature = (file_path, use_index = true))]
+fn check_file(file_path: String, use_index: bool) -> PyResult<String> {
     let path = Path::new(&file_path);
     let project_root = find_project_root(path);
 
@@ -21,6 +23,14 @@ fn check_file(file_path: String) -> PyResult<String> {
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(format!("{}", e)))?;
 
     let mut linter = Linter::new();
+
+    if use_index {
+        let cache_dir = project_root.join(".typedframes_cache");
+        if let Some(index) = load_index(&cache_dir) {
+            linter.load_cross_file_symbols(&index, &source, path, &project_root);
+        }
+    }
+
     let errors = linter
         .check_file_internal(&source, path)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("{}", e)))?;
@@ -29,9 +39,21 @@ fn check_file(file_path: String) -> PyResult<String> {
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("{}", e)))
 }
 
+#[pyfunction]
+fn build_project_index(project_root: String) -> PyResult<String> {
+    let root = Path::new(&project_root);
+    let index = build_index_internal(root);
+    let cache_dir = root.join(".typedframes_cache");
+    save_index(&index, &cache_dir)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("{}", e)))?;
+    serde_json::to_string(&index)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("{}", e)))
+}
+
 #[pymodule]
 fn _rust_checker(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(check_file, m)?)?;
+    m.add_function(wrap_pyfunction!(build_project_index, m)?)?;
     Ok(())
 }
 
@@ -87,6 +109,146 @@ pub fn find_project_root(start_path: &Path) -> PathBuf {
         }
     }
 }
+
+// ── Index structs ──────────────────────────────────────────────────────────────
+
+#[derive(Serialize, Deserialize)]
+struct IndexFunction {
+    returns_schema: String,
+    returns_frame: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct IndexEntry {
+    mtime: u64,
+    schemas: HashMap<String, Vec<String>>,
+    functions: HashMap<String, IndexFunction>,
+    exports: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct ProjectIndex {
+    version: u32,
+    files: HashMap<String, IndexEntry>,
+}
+
+// ── Index helpers ──────────────────────────────────────────────────────────────
+
+fn collect_py_files(dir: &Path) -> Vec<PathBuf> {
+    let mut result = Vec::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        let Ok(entries) = fs::read_dir(&current) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+            if name_str.starts_with('.') {
+                continue;
+            }
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.extension().and_then(|e| e.to_str()) == Some("py") {
+                result.push(path);
+            }
+        }
+    }
+    result
+}
+
+fn index_file(path: &Path) -> Option<IndexEntry> {
+    let source = fs::read_to_string(path).ok()?;
+    let mtime = fs::metadata(path)
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    let mut linter = Linter::new();
+    let _ = linter.check_file_internal(&source, path);
+
+    let schemas = linter.schemas;
+    let functions: HashMap<String, IndexFunction> = linter
+        .functions
+        .into_iter()
+        .map(|(k, v)| {
+            (
+                k,
+                IndexFunction {
+                    returns_schema: v,
+                    returns_frame: String::new(),
+                },
+            )
+        })
+        .collect();
+
+    let exports = parse_module(&source)
+        .ok()
+        .map(|parsed| {
+            let module = parsed.into_syntax();
+            let mut names = Vec::new();
+            for stmt in &module.body {
+                let Stmt::Assign(assign) = stmt else {
+                    continue;
+                };
+                for target in &assign.targets {
+                    let Expr::Name(name) = target else {
+                        continue;
+                    };
+                    if name.id.as_str() != "__all__" {
+                        continue;
+                    }
+                    let Expr::List(list) = &*assign.value else {
+                        continue;
+                    };
+                    for el in &list.elts {
+                        if let Expr::StringLiteral(s) = el {
+                            names.push(s.value.to_str().to_string());
+                        }
+                    }
+                }
+            }
+            names
+        })
+        .unwrap_or_default();
+
+    Some(IndexEntry {
+        mtime,
+        schemas,
+        functions,
+        exports,
+    })
+}
+
+fn build_index_internal(project_root: &Path) -> ProjectIndex {
+    let py_files = collect_py_files(project_root);
+    let mut files = HashMap::new();
+    for file_path in py_files {
+        if let Some(entry) = index_file(&file_path) {
+            if let Some(path_str) = file_path.to_str() {
+                files.insert(path_str.to_string(), entry);
+            }
+        }
+    }
+    ProjectIndex { version: 1, files }
+}
+
+fn save_index(index: &ProjectIndex, cache_dir: &Path) -> Result<(), anyhow::Error> {
+    fs::create_dir_all(cache_dir)?;
+    let json = serde_json::to_string_pretty(index)?;
+    fs::write(cache_dir.join("index.json"), json)?;
+    Ok(())
+}
+
+fn load_index(cache_dir: &Path) -> Option<ProjectIndex> {
+    let content = fs::read_to_string(cache_dir.join("index.json")).ok()?;
+    serde_json::from_str(&content).ok()
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 
 /// Reserved pandas/polars method names that shouldn't be used as column names
 const RESERVED_METHODS: &[&str] = &[
@@ -305,6 +467,63 @@ impl Linter {
         }
 
         Ok(errors)
+    }
+
+    /// Load schemas and functions from cross-file index based on import statements.
+    fn load_cross_file_symbols(
+        &mut self,
+        index: &ProjectIndex,
+        source: &str,
+        _file_path: &Path,
+        project_root: &Path,
+    ) {
+        let Ok(parsed) = parse_module(source) else {
+            return;
+        };
+        let module = parsed.into_syntax();
+        for stmt in &module.body {
+            let Stmt::ImportFrom(import_from) = stmt else {
+                continue;
+            };
+            if import_from.level > 0 {
+                continue;
+            }
+            let Some(module_ident) = &import_from.module else {
+                continue;
+            };
+            let module_name = module_ident.id.as_str();
+            if module_name.starts_with("typedframes") {
+                continue;
+            }
+            let mod_path = module_name.replace('.', "/");
+            let candidates = [
+                project_root.join(format!("{mod_path}.py")),
+                project_root.join("src").join(format!("{mod_path}.py")),
+            ];
+            let Some(resolved_path) = candidates.iter().find(|p| p.exists()) else {
+                continue;
+            };
+            let Some(resolved_str) = resolved_path.to_str() else {
+                continue;
+            };
+            let Some(entry) = index.files.get(resolved_str) else {
+                continue;
+            };
+            for alias in &import_from.names {
+                let name = alias.name.id.as_str();
+                if let Some(cols) = entry.schemas.get(name) {
+                    self.schemas.insert(name.to_string(), cols.clone());
+                }
+                if let Some(func) = entry.functions.get(name) {
+                    self.functions
+                        .insert(name.to_string(), func.returns_schema.clone());
+                    if let Some(schema_cols) = entry.schemas.get(&func.returns_schema) {
+                        self.schemas
+                            .insert(func.returns_schema.clone(), schema_cols.clone());
+                    }
+                }
+            }
+        }
     }
 
     /// Check if a base class name indicates a typedframes schema

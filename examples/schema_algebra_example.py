@@ -5,7 +5,6 @@ import pandas as pd
 from typedframes import BaseSchema, Column
 from typedframes.pandas import PandasFrame
 
-
 # -- Compose upward: base schemas first, extend via inheritance ---------------
 
 
