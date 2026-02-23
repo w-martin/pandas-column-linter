@@ -148,3 +148,372 @@ print(df["wrong_column"])
             messages = [e["message"] for e in errors]
             self.assertTrue(any("wrong_column" in m for m in messages))
             self.assertFalse(any("user_id" in m for m in messages))
+
+    def test_should_infer_columns_from_multi_column_subscript(self) -> None:
+        """Test that a = df[["foo", "bar"]] creates an inferred schema and enforces it."""
+        # arrange
+        source = """
+from typedframes import BaseSchema, Column
+from typedframes.pandas import PandasFrame
+
+class MySchema(BaseSchema):
+    foo = Column(type=str)
+    bar = Column(type=str)
+    baz = Column(type=str)
+
+df: PandasFrame[MySchema] = PandasFrame.from_schema(load(), MySchema)
+a = df[["foo", "bar"]]
+_ = a["baz"]
+_ = a["foo"]
+"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+            f.write(source)
+            temp_file = f.name
+
+        try:
+            # act
+            result = check_file(temp_file, use_index=False)
+            errors = json.loads(result)
+
+            # assert — "baz" not in slice, "foo" is fine
+            messages = [e["message"] for e in errors]
+            self.assertTrue(any("baz" in m for m in messages))
+            self.assertFalse(any("'foo'" in m for m in messages))
+        finally:
+            Path(temp_file).unlink()
+
+    def test_should_catch_error_when_slicing_column_not_in_base(self) -> None:
+        """Test that slicing with a column not in the base schema emits an error."""
+        # arrange
+        source = """
+from typedframes import BaseSchema, Column
+from typedframes.pandas import PandasFrame
+
+class MySchema(BaseSchema):
+    foo = Column(type=str)
+    bar = Column(type=str)
+
+df: PandasFrame[MySchema] = PandasFrame.from_schema(load(), MySchema)
+a = df[["foo", "missing"]]
+"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+            f.write(source)
+            temp_file = f.name
+
+        try:
+            # act
+            result = check_file(temp_file, use_index=False)
+            errors = json.loads(result)
+
+            # assert
+            messages = [e["message"] for e in errors]
+            self.assertTrue(any("missing" in m for m in messages))
+        finally:
+            Path(temp_file).unlink()
+
+    def test_should_propagate_schema_through_row_filter(self) -> None:
+        """Test that filter() propagates the base schema."""
+        # arrange
+        source = """
+from typedframes import BaseSchema, Column
+from typedframes.pandas import PandasFrame
+
+class MySchema(BaseSchema):
+    col = Column(type=str)
+
+df: PandasFrame[MySchema] = PandasFrame.from_schema(load(), MySchema)
+filtered = df.filter(df["col"] == "x")
+_ = filtered["nonexistent"]
+"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+            f.write(source)
+            temp_file = f.name
+
+        try:
+            # act
+            result = check_file(temp_file, use_index=False)
+            errors = json.loads(result)
+
+            # assert
+            messages = [e["message"] for e in errors]
+            self.assertTrue(any("nonexistent" in m for m in messages))
+        finally:
+            Path(temp_file).unlink()
+
+    def test_should_infer_columns_from_polars_select(self) -> None:
+        """Test that small = df.select(["foo"]) creates an inferred schema."""
+        # arrange
+        source = """
+from typedframes import BaseSchema, Column
+from typedframes.polars import PolarsFrame
+
+class MySchema(BaseSchema):
+    foo = Column(type=str)
+    bar = Column(type=str)
+
+df: PolarsFrame[MySchema] = PolarsFrame.from_schema(load(), MySchema)
+small = df.select(["foo"])
+_ = small["foo"]
+_ = small["bar"]
+"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+            f.write(source)
+            temp_file = f.name
+
+        try:
+            # act
+            result = check_file(temp_file, use_index=False)
+            errors = json.loads(result)
+
+            # assert — "bar" not in select, "foo" is fine
+            messages = [e["message"] for e in errors]
+            self.assertTrue(any("'bar'" in m for m in messages))
+            self.assertFalse(any("'foo'" in m for m in messages))
+        finally:
+            Path(temp_file).unlink()
+
+    def test_should_infer_columns_from_drop(self) -> None:
+        """Test that trimmed = df.drop(columns=["baz"]) excludes the dropped column."""
+        # arrange
+        source = """
+from typedframes import BaseSchema, Column
+from typedframes.pandas import PandasFrame
+
+class MySchema(BaseSchema):
+    foo = Column(type=str)
+    bar = Column(type=str)
+    baz = Column(type=str)
+
+df: PandasFrame[MySchema] = PandasFrame.from_schema(load(), MySchema)
+trimmed = df.drop(columns=["baz"])
+_ = trimmed["baz"]
+_ = trimmed["foo"]
+"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+            f.write(source)
+            temp_file = f.name
+
+        try:
+            # act
+            result = check_file(temp_file, use_index=False)
+            errors = json.loads(result)
+
+            # assert — "baz" dropped, "foo" ok
+            messages = [e["message"] for e in errors]
+            self.assertTrue(any("'baz'" in m for m in messages))
+            self.assertFalse(any("'foo'" in m for m in messages))
+        finally:
+            Path(temp_file).unlink()
+
+    def test_should_warn_when_dropping_unknown_column(self) -> None:
+        """Test that dropping a column not in the schema emits a W002 warning."""
+        # arrange
+        source = """
+from typedframes import BaseSchema, Column
+from typedframes.pandas import PandasFrame
+
+class MySchema(BaseSchema):
+    foo = Column(type=str)
+    bar = Column(type=str)
+
+df: PandasFrame[MySchema] = PandasFrame.from_schema(load(), MySchema)
+trimmed = df.drop(columns=["nonexistent"])
+"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+            f.write(source)
+            temp_file = f.name
+
+        try:
+            # act
+            result = check_file(temp_file, use_index=False)
+            errors = json.loads(result)
+
+            # assert
+            warnings = [e for e in errors if e.get("severity") == "warning"]
+            self.assertTrue(any("nonexistent" in e["message"] for e in warnings))
+        finally:
+            Path(temp_file).unlink()
+
+    def test_should_infer_columns_from_rename(self) -> None:
+        """Test that renamed = df.rename(columns={"foo": "bar"}) updates the column set."""
+        # arrange
+        source = """
+from typedframes import BaseSchema, Column
+from typedframes.pandas import PandasFrame
+
+class MySchema(BaseSchema):
+    foo = Column(type=str)
+    other = Column(type=str)
+
+df: PandasFrame[MySchema] = PandasFrame.from_schema(load(), MySchema)
+renamed = df.rename(columns={"foo": "bar"})
+_ = renamed["foo"]
+_ = renamed["bar"]
+"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+            f.write(source)
+            temp_file = f.name
+
+        try:
+            # act
+            result = check_file(temp_file, use_index=False)
+            errors = json.loads(result)
+
+            # assert — "foo" renamed to "bar", so "foo" should error
+            messages = [e["message"] for e in errors]
+            self.assertTrue(any("'foo'" in m for m in messages))
+            self.assertFalse(any("'bar'" in m for m in messages))
+        finally:
+            Path(temp_file).unlink()
+
+    def test_should_infer_columns_from_assign(self) -> None:
+        """Test that augmented = df.assign(new_col=1) adds the new column."""
+        # arrange
+        source = """
+from typedframes import BaseSchema, Column
+from typedframes.pandas import PandasFrame
+
+class MySchema(BaseSchema):
+    old = Column(type=str)
+
+df: PandasFrame[MySchema] = PandasFrame.from_schema(load(), MySchema)
+augmented = df.assign(new_col=1)
+_ = augmented["new_col"]
+_ = augmented["old"]
+_ = augmented["missing"]
+"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+            f.write(source)
+            temp_file = f.name
+
+        try:
+            # act
+            result = check_file(temp_file, use_index=False)
+            errors = json.loads(result)
+
+            # assert — new_col and old are fine; missing errors
+            messages = [e["message"] for e in errors]
+            self.assertFalse(any("'new_col'" in m for m in messages))
+            self.assertFalse(any("'old'" in m for m in messages))
+            self.assertTrue(any("'missing'" in m for m in messages))
+        finally:
+            Path(temp_file).unlink()
+
+    def test_should_infer_columns_from_load_with_usecols(self) -> None:
+        """Test that pd.read_csv with usecols creates an inferred schema."""
+        # arrange
+        source = """
+import pandas as pd
+
+df = pd.read_csv("x.csv", usecols=["a", "b"])
+_ = df["a"]
+_ = df["c"]
+"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+            f.write(source)
+            temp_file = f.name
+
+        try:
+            # act
+            result = check_file(temp_file, use_index=False)
+            errors = json.loads(result)
+
+            # assert — "c" not in usecols, "a" is fine
+            messages = [e["message"] for e in errors]
+            self.assertTrue(any("Column 'c' does not exist" in m for m in messages))
+            self.assertFalse(any("Column 'a' does not exist" in m for m in messages))
+        finally:
+            Path(temp_file).unlink()
+
+    def test_should_warn_when_load_has_no_columns_specified(self) -> None:
+        """Test that pd.read_csv without column info emits a W001 warning."""
+        # arrange
+        source = """
+import pandas as pd
+
+df = pd.read_csv("x.csv")
+"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+            f.write(source)
+            temp_file = f.name
+
+        try:
+            # act
+            result = check_file(temp_file, use_index=False)
+            errors = json.loads(result)
+
+            # assert
+            self.assertEqual(len(errors), 1)
+            self.assertEqual(errors[0]["severity"], "warning")
+            self.assertIn("columns unknown at lint time", errors[0]["message"])
+        finally:
+            Path(temp_file).unlink()
+
+    def test_should_not_warn_when_load_has_schema_annotation(self) -> None:
+        """Test that df: PandasFrame[MySchema] = pd.read_csv(...) does not emit W001."""
+        # arrange
+        source = """
+import pandas as pd
+from typedframes import BaseSchema, Column
+from typedframes.pandas import PandasFrame
+
+class MySchema(BaseSchema):
+    a = Column(type=str)
+    b = Column(type=int)
+
+df: PandasFrame[MySchema] = pd.read_csv("x.csv")
+_ = df["a"]
+_ = df["c"]
+"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+            f.write(source)
+            temp_file = f.name
+
+        try:
+            # act
+            result = check_file(temp_file, use_index=False)
+            errors = json.loads(result)
+
+            # assert — no W001; "c" errors from schema; no warning for "a"
+            warnings = [e for e in errors if e.get("severity") == "warning"]
+            self.assertEqual(len(warnings), 0)
+            messages = [e["message"] for e in errors]
+            self.assertTrue(any("'c'" in m for m in messages))
+        finally:
+            Path(temp_file).unlink()
+
+    def test_should_propagate_inferred_through_filter_chain(self) -> None:
+        """Test that an inferred schema propagates through a filter chain."""
+        # arrange
+        source = """
+from typedframes import BaseSchema, Column
+from typedframes.pandas import PandasFrame
+
+class MySchema(BaseSchema):
+    foo = Column(type=str)
+    bar = Column(type=str)
+    baz = Column(type=str)
+
+df: PandasFrame[MySchema] = PandasFrame.from_schema(load(), MySchema)
+a = df[["foo", "bar"]]
+b = a.filter(a["foo"] == "x")
+_ = b["foo"]
+_ = b["baz"]
+"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+            f.write(source)
+            temp_file = f.name
+
+        try:
+            # act
+            result = check_file(temp_file, use_index=False)
+            errors = json.loads(result)
+
+            # assert — "foo" ok through chain; "baz" not in slice so errors
+            messages = [e["message"] for e in errors]
+            self.assertTrue(any("'baz'" in m for m in messages))
+            # "foo" should not error (it's in the inferred set)
+            b_baz_errors = [m for m in messages if "'baz'" in m]
+            self.assertGreater(len(b_baz_errors), 0)
+        finally:
+            Path(temp_file).unlink()

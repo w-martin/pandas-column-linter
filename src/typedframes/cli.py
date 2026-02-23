@@ -42,7 +42,11 @@ def _check_files(files: list[Path], *, use_index: bool = True) -> list[dict]:
 
 def _format_human(errors: list[dict]) -> str:
     """Format errors as human-readable lines."""
-    return "\n".join(f"\u2717 {error['file']}:{error['line']} - {error['message']}" for error in errors)
+    lines = []
+    for error in errors:
+        icon = "\u26a0" if error.get("severity") == "warning" else "\u2717"
+        lines.append(f"{icon} {error['file']}:{error['line']} - {error['message']}")
+    return "\n".join(lines)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -55,6 +59,9 @@ def main(argv: list[str] | None = None) -> None:
     check_parser.add_argument("--strict", action="store_true", help="Exit with code 1 if any errors are found.")
     check_parser.add_argument("--json", dest="json_output", action="store_true", help="Output results as JSON.")
     check_parser.add_argument("--no-index", action="store_true", help="Disable cross-file index.")
+    check_parser.add_argument(
+        "--no-warnings", action="store_true", help="Suppress all warnings (W001, W002). Overrides pyproject.toml."
+    )
 
     args = parser.parse_args(argv)
 
@@ -63,6 +70,31 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(2)
 
     _run_check(args)
+
+
+def _print_results(files: list[Path], all_errors: list[dict], elapsed: float, *, json_output: bool) -> None:
+    """Print check results in human-readable or JSON format."""
+    errors_only = [e for e in all_errors if e.get("severity") != "warning"]
+    warnings = [e for e in all_errors if e.get("severity") == "warning"]
+    if json_output:
+        print(json.dumps(all_errors, indent=2))
+        return
+    if all_errors:
+        print(_format_human(all_errors))
+        print()
+    file_label = "file" if len(files) == 1 else "files"
+    if errors_only or warnings:
+        parts = []
+        if errors_only:
+            error_label = "error" if len(errors_only) == 1 else "errors"
+            parts.append(f"{len(errors_only)} {error_label}")
+        if warnings:
+            warn_label = "warning" if len(warnings) == 1 else "warnings"
+            parts.append(f"{len(warnings)} {warn_label}")
+        summary = ", ".join(parts)
+        print(f"\u2717 Found {summary} in {len(files)} {file_label} ({elapsed:.1f}s)")
+    else:
+        print(f"\u2713 Checked {len(files)} {file_label} in {elapsed:.1f}s")
 
 
 def _run_check(args: argparse.Namespace) -> None:
@@ -84,21 +116,14 @@ def _run_check(args: argparse.Namespace) -> None:
 
     files = _collect_python_files(path)
     start = time.perf_counter()
-    errors = _check_files(files, use_index=use_index)
+    all_errors = _check_files(files, use_index=use_index)
     elapsed = time.perf_counter() - start
 
-    if args.json_output:
-        print(json.dumps(errors, indent=2))
-    else:
-        if errors:
-            print(_format_human(errors))
-            print()
-        file_label = "file" if len(files) == 1 else "files"
-        if errors:
-            error_label = "error" if len(errors) == 1 else "errors"
-            print(f"\u2717 Found {len(errors)} {error_label} in {len(files)} {file_label} ({elapsed:.1f}s)")
-        else:
-            print(f"\u2713 Checked {len(files)} {file_label} in {elapsed:.1f}s")
+    if args.no_warnings:
+        all_errors = [e for e in all_errors if e.get("severity") != "warning"]
 
-    if args.strict and errors:
+    errors_only = [e for e in all_errors if e.get("severity") != "warning"]
+    _print_results(files, all_errors, elapsed, json_output=args.json_output)
+
+    if args.strict and errors_only:
         sys.exit(1)

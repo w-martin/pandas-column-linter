@@ -163,6 +163,10 @@ include = ["benchmarks/**/*.py"]
 [tool.ty.overrides.rules]
 no-matching-overload = "ignore"
 
+[tool.typedframes]
+enabled = true
+warnings = true
+
 [tool.licensecheck]
 using = "PEP631"
 groups = ["dev"]

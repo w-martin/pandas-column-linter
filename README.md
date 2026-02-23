@@ -36,6 +36,7 @@ def process(df: PandasFrame[UserData]) -> None:
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Static Analysis](#static-analysis)
+- [Column Inference](#column-inference)
 - [Static Analysis Performance](#static-analysis-performance)
 - [Comparison](#comparison)
 - [Type Safety With Multiple Backends](#type-safety-with-multiple-backends)
@@ -191,6 +192,16 @@ typedframes check src/ --json
 
 # Skip cross-file index (single-file mode, faster for quick checks)
 typedframes check src/ --no-index
+
+# Suppress all W001/W002 warnings
+typedframes check src/ --no-warnings
+```
+
+To suppress warnings project-wide, add to `pyproject.toml`:
+```toml
+[tool.typedframes]
+enabled = true
+warnings = false
 ```
 
 ### Option 2: Mypy Plugin (Comprehensive)
@@ -218,6 +229,104 @@ mypy src/
 - Comprehensive type checking
 - Integration with existing mypy setup
 - IDE error highlighting
+
+---
+
+## Column Inference
+
+The standalone checker infers column sets directly from data loading calls and method chains, so you get
+column validation even on unannotated code.
+
+### Inferred Schemas
+
+When you pass `usecols=` (pandas) or `schema=` / `columns=` (polars), the checker builds an inferred column set
+and validates all subscript access against it — no schema annotation required:
+
+```python
+# Checker infers {user_id, email} from usecols= — no annotation needed
+df = pd.read_csv("users.csv", usecols=["user_id", "email"])
+print(df["user_id"])   # ✓ OK — in usecols
+# print(df["age"])     # ✗ Error: 'age' not in inferred column set
+```
+
+The checker also propagates column sets through method chains. Row-preserving operations (`filter`, `query`,
+`head`, `tail`, `sort_values`, `dropna`, `fillna`, `ffill`, `bfill`, `reset_index`) pass the column set through
+unchanged. Structural operations update it:
+
+```python
+df: PandasFrame[UserData] = pd.read_csv("users.csv")
+
+# Subscript slice — inferred column set {user_id, email}
+small = df[["user_id", "email"]]
+# print(small["age"])  # ✗ Error: 'age' not in inferred column set
+
+# rename() — old name removed, new name added
+renamed = small.rename(columns={"email": "email_address"})
+print(renamed["email_address"])  # ✓ OK
+
+# drop() — column removed from inferred set
+trimmed = df.drop(columns=["age"])
+# print(trimmed["age"])  # ✗ Error: 'age' was dropped
+
+# assign() — new column added to inferred set
+augmented = df.assign(created_at="2024-01-01")
+print(augmented["created_at"])  # ✓ OK
+```
+
+### Inference Gaps and Warnings
+
+When the checker cannot determine the column set it emits a warning rather than silently skipping validation.
+
+**W001 — columns unknown at lint time**
+
+Emitted when a DataFrame is loaded without `usecols`/`columns`/`schema=` and without a schema annotation:
+
+```python
+df = pd.read_csv("users.csv")
+# ⚠ W001: columns unknown at lint time; specify `usecols`/`columns` or
+#   annotate: `df: PandasFrame[MySchema] = pd.read_csv(...)`
+```
+
+Fix option 1 — annotate with a schema:
+```python
+df: PandasFrame[UserData] = pd.read_csv("users.csv")
+```
+
+Fix option 2 — pass `usecols=`:
+```python
+df = pd.read_csv("users.csv", usecols=["user_id", "email"])
+```
+
+**W002 — dropped column does not exist**
+
+Emitted when `drop(columns=[...])` names a column that isn't in the inferred set:
+
+```python
+df: PandasFrame[UserData] = pd.read_csv("users.csv")
+trimmed = df.drop(columns=["nonexistent"])
+# ⚠ W002: Dropped column 'nonexistent' does not exist in UserData
+```
+
+### Configuring Warnings
+
+Disable warnings project-wide in `pyproject.toml`:
+
+```toml
+[tool.typedframes]
+enabled = true
+warnings = false
+```
+
+Or suppress them for a single run:
+
+```shell
+typedframes check src/ --no-warnings
+```
+
+### See Also
+
+[`examples/inference_example.py`](examples/inference_example.py) — complete walkthrough of all four inference
+scenarios with annotated ✓/✗ comments.
 
 ---
 
@@ -836,6 +945,7 @@ MIT License - see [LICENSE](LICENSE)
 - [x] Column name collision warnings
 - [x] Pandera integration (`to_pandera_schema()`)
 - [x] Cross-file schema inference (project-level index, `--no-index` flag)
+- [x] Aggressive column inference (W001/W002 warnings, method chain propagation)
 
 **Planned:**
 

@@ -120,6 +120,21 @@ class TestCli(unittest.TestCase):
         self.assertIn("\u2717 src/foo.py:23 - Column 'x' not in Schema", result)
         self.assertIn("\u2717 src/bar.py:10 - Column 'y' not in Schema", result)
 
+    def test_should_format_warning_with_warning_icon(self) -> None:
+        """Test that warnings use the ⚠ icon and errors use ✗."""
+        # arrange
+        items = [
+            {"file": "a.py", "line": 1, "col": 0, "message": "error msg", "severity": "error"},
+            {"file": "b.py", "line": 2, "col": 0, "message": "warn msg", "severity": "warning"},
+        ]
+
+        # act
+        result = _format_human(items)
+
+        # assert
+        self.assertIn("\u2717 a.py:1 - error msg", result)
+        self.assertIn("\u26a0 b.py:2 - warn msg", result)
+
     def test_should_output_json_when_flag_set(self) -> None:
         """Test JSON output mode."""
         # arrange
@@ -220,6 +235,37 @@ class TestCli(unittest.TestCase):
             output = captured.getvalue()
             self.assertIn("\u2717 Found 1 error", output)
 
+    def test_should_print_warning_count_in_summary(self) -> None:
+        """Test that warning count appears in the summary line."""
+        # arrange
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            py_file = Path(tmpdir) / "warn.py"
+            py_file.write_text("import pandas as pd\ndf = pd.read_csv('x.csv')\n")
+
+            captured = StringIO()
+
+            # act
+            with patch("sys.stdout", captured):
+                main(["check", str(py_file), "--no-index"])
+
+            # assert
+            output = captured.getvalue()
+            self.assertIn("1 warning", output)
+
+    def test_should_not_exit_1_when_strict_and_only_warnings(self) -> None:
+        """Test that --strict does not exit 1 when there are only warnings (no errors)."""
+        # arrange
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            py_file = Path(tmpdir) / "warn.py"
+            py_file.write_text("import pandas as pd\ndf = pd.read_csv('x.csv')\n")
+
+            # act / assert — should not raise SystemExit(1)
+            main(["check", str(py_file), "--strict", "--no-index"])
+
     def test_should_check_directory(self) -> None:
         """Test checking an entire directory."""
         # arrange
@@ -258,6 +304,61 @@ class TestCli(unittest.TestCase):
             # assert
             output = captured.getvalue()
             self.assertIn("\u2713 Checked 1 file", output)
+
+    def test_should_suppress_warnings_with_no_warnings_flag(self) -> None:
+        """Test that --no-warnings suppresses W001/W002 warnings from output."""
+        # arrange
+        with tempfile.TemporaryDirectory() as tmpdir:
+            py_file = Path(tmpdir) / "warn.py"
+            py_file.write_text("import pandas as pd\ndf = pd.read_csv('x.csv')\n")
+
+            captured = StringIO()
+
+            # act
+            with patch("sys.stdout", captured):
+                main(["check", str(py_file), "--no-index", "--no-warnings"])
+
+            # assert
+            output = captured.getvalue()
+            self.assertNotIn("warning", output)
+            self.assertIn("\u2713 Checked 1 file", output)
+
+    def test_should_still_show_errors_with_no_warnings_flag(self) -> None:
+        """Test that --no-warnings suppresses warnings but preserves errors."""
+        # arrange
+        warning_error = {
+            "file": "mixed.py",
+            "line": 2,
+            "col": 0,
+            "message": "W001: columns unknown",
+            "severity": "warning",
+        }
+        actual_error = {
+            "file": "mixed.py",
+            "line": 7,
+            "col": 0,
+            "message": "Column 'wrong' not in Schema",
+            "severity": "error",
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            py_file = Path(tmpdir) / "mixed.py"
+            py_file.write_text("x = 1\n")
+
+            captured = StringIO()
+
+            # act
+            with (
+                patch("typedframes.cli._check_files", return_value=[warning_error, actual_error]),
+                patch("sys.stdout", captured),
+            ):
+                main(["check", str(py_file), "--no-warnings"])
+
+            # assert
+            output = captured.getvalue()
+            self.assertNotIn("W001", output)
+            self.assertIn("Column 'wrong'", output)
+            self.assertIn("1 error", output)
 
     def test_should_not_crash_when_checker_not_installed_on_directory(self) -> None:
         """Test that a missing Rust extension when checking a directory exits with code 1."""

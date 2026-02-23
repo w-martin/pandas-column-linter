@@ -26,10 +26,10 @@ def _needs_build() -> bool:
 
 @task
 def build(ctx: Context, *, force: bool = False) -> None:
-    """Build the Rust checker binary if needed."""
+    """Build the Rust checker extension (maturin develop) if needed."""
     if force or _needs_build():
         print("Building Rust checker...")
-        ctx.run(f"cd {RUST_DIR} && cargo build")
+        ctx.run("maturin develop --manifest-path rust/Cargo.toml")
     else:
         print("Rust checker is up to date.")
 

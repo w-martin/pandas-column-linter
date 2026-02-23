@@ -14,8 +14,9 @@ use std::time::UNIX_EPOCH;
 fn check_file(file_path: String, use_index: bool) -> PyResult<String> {
     let path = Path::new(&file_path);
     let project_root = find_project_root(path);
+    let config = load_linter_config(&project_root);
 
-    if !is_enabled(&project_root) {
+    if !config.enabled.unwrap_or(true) {
         return Ok("[]".to_string());
     }
 
@@ -31,9 +32,13 @@ fn check_file(file_path: String, use_index: bool) -> PyResult<String> {
         }
     }
 
-    let errors = linter
+    let mut errors = linter
         .check_file_internal(&source, path)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("{}", e)))?;
+
+    if !config.warnings.unwrap_or(true) {
+        errors.retain(|e| e.severity != "warning");
+    }
 
     serde_json::to_string(&errors)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("{}", e)))
@@ -70,29 +75,49 @@ struct ToolConfig {
 #[derive(serde::Deserialize)]
 struct LinterConfig {
     enabled: Option<bool>,
+    warnings: Option<bool>,
 }
 
-pub fn is_enabled(project_root: &Path) -> bool {
+fn load_linter_config(project_root: &Path) -> LinterConfig {
     let config_path = project_root.join("pyproject.toml");
     if !config_path.exists() {
-        return true;
+        return LinterConfig {
+            enabled: None,
+            warnings: None,
+        };
     }
 
     let content = match fs::read_to_string(config_path) {
         Ok(c) => c,
-        Err(_) => return true,
+        Err(_) => {
+            return LinterConfig {
+                enabled: None,
+                warnings: None,
+            }
+        }
     };
 
     let config: Config = match toml::from_str(&content) {
         Ok(c) => c,
-        Err(_) => return true,
+        Err(_) => {
+            return LinterConfig {
+                enabled: None,
+                warnings: None,
+            }
+        }
     };
 
     config
         .tool
         .and_then(|t| t.typedframes)
-        .and_then(|l| l.enabled)
-        .unwrap_or(true)
+        .unwrap_or(LinterConfig {
+            enabled: None,
+            warnings: None,
+        })
+}
+
+pub fn is_enabled(project_root: &Path) -> bool {
+    load_linter_config(project_root).enabled.unwrap_or(true)
 }
 
 pub fn find_project_root(start_path: &Path) -> PathBuf {
@@ -370,6 +395,48 @@ const RESERVED_METHODS: &[&str] = &[
     "cov",
 ];
 
+const LOAD_FUNCTIONS: &[&str] = &[
+    "read_csv",
+    "read_parquet",
+    "read_json",
+    "read_excel",
+    "read_sql",
+    "read_sql_query",
+    "read_sql_table",
+    "read_html",
+    "read_feather",
+    "read_hdf",
+    "read_orc",
+    "read_clipboard",
+    "read_ndjson",
+    "read_avro",
+    "read_ipc",
+    "scan_csv",
+    "scan_parquet",
+    "scan_json",
+    "scan_ndjson",
+    "scan_ipc",
+];
+
+const LOAD_MODULES: &[&str] = &["pd", "pandas", "pl", "polars"];
+
+const ROW_PASSTHROUGH_METHODS: &[&str] = &[
+    "filter",
+    "query",
+    "head",
+    "tail",
+    "sample",
+    "sort_values",
+    "sort",
+    "reset_index",
+    "nlargest",
+    "nsmallest",
+    "fillna",
+    "dropna",
+    "ffill",
+    "bfill",
+];
+
 fn levenshtein(a: &str, b: &str) -> usize {
     let a_chars: Vec<char> = a.chars().collect();
     let b_chars: Vec<char> = b.chars().collect();
@@ -414,6 +481,7 @@ pub struct LintError {
     pub line: usize,
     pub col: usize,
     pub message: String,
+    pub severity: String, // "error" or "warning"
 }
 
 pub struct Linter {
@@ -586,6 +654,143 @@ impl Linter {
         }
     }
 
+    /// Extract a list of string literals from a `["a", "b", ...]` list expression.
+    /// Returns None if the expression is not a list or any element is not a string literal.
+    fn extract_string_list(expr: &Expr) -> Option<Vec<String>> {
+        if let Expr::List(list) = expr {
+            let mut result = Vec::new();
+            for el in &list.elts {
+                if let Expr::StringLiteral(s) = el {
+                    result.push(s.value.to_str().to_string());
+                } else {
+                    return None;
+                }
+            }
+            Some(result)
+        } else {
+            None
+        }
+    }
+
+    /// Extract columns from a list or single string expression.
+    fn extract_string_list_or_single(expr: &Expr) -> Option<Vec<String>> {
+        match expr {
+            Expr::List(_) => Self::extract_string_list(expr),
+            Expr::StringLiteral(s) => Some(vec![s.value.to_str().to_string()]),
+            _ => None,
+        }
+    }
+
+    /// Extract column names from a load function call (usecols/columns kwarg or dtype/schema dict keys).
+    fn extract_load_columns(call: &ast::ExprCall) -> Option<Vec<String>> {
+        for keyword in &call.arguments.keywords {
+            let kw_name = keyword.arg.as_ref().map(|s| s.as_str());
+            match kw_name {
+                Some("usecols") | Some("columns") => {
+                    if let Some(cols) = Self::extract_string_list(&keyword.value) {
+                        return Some(cols);
+                    }
+                }
+                Some("dtype") | Some("schema") => {
+                    if let Expr::Dict(dict) = &keyword.value {
+                        let keys: Vec<String> = dict
+                            .items
+                            .iter()
+                            .filter_map(|item| item.key.as_ref())
+                            .filter_map(|k| Self::extract_string_literal(k))
+                            .map(|s| s.to_string())
+                            .collect();
+                        if !keys.is_empty() {
+                            return Some(keys);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+
+    /// Extract dropped column names from a drop() call.
+    fn extract_drop_columns(call: &ast::ExprCall) -> Option<Vec<String>> {
+        // Check `columns=` kwarg first (pandas pattern — always correct for column drops)
+        for keyword in &call.arguments.keywords {
+            if keyword.arg.as_ref().map(|s| s.as_str()) == Some("columns") {
+                return Self::extract_string_list_or_single(&keyword.value);
+            }
+        }
+
+        // Check for axis kwarg
+        let axis_kwarg = call
+            .arguments
+            .keywords
+            .iter()
+            .find(|k| k.arg.as_ref().map(|s| s.as_str()) == Some("axis"));
+
+        if let Some(axis_kw) = axis_kwarg {
+            // axis kwarg present — only drop columns when axis=1
+            if let Expr::NumberLiteral(n) = &axis_kw.value {
+                if let ast::Number::Int(ref i) = n.value {
+                    if i.as_u64() == Some(1) {
+                        if let Some(first_arg) = call.arguments.args.first() {
+                            return Self::extract_string_list_or_single(first_arg);
+                        }
+                    }
+                }
+            }
+            return None; // axis present but not 1 → row drop
+        }
+
+        // No axis kwarg → polars pattern, use first positional arg
+        if let Some(first_arg) = call.arguments.args.first() {
+            return Self::extract_string_list_or_single(first_arg);
+        }
+
+        None
+    }
+
+    /// Extract rename mapping from a rename() call: {"old": "new", ...}.
+    fn extract_rename_mapping(call: &ast::ExprCall) -> Option<HashMap<String, String>> {
+        // Check `columns={"old": "new"}` kwarg (pandas)
+        for keyword in &call.arguments.keywords {
+            if keyword.arg.as_ref().map(|s| s.as_str()) == Some("columns") {
+                if let Expr::Dict(dict) = &keyword.value {
+                    return Self::extract_string_dict(dict);
+                }
+            }
+        }
+        // Fall back to first positional arg dict (polars)
+        if let Some(Expr::Dict(dict)) = call.arguments.args.first() {
+            return Self::extract_string_dict(dict);
+        }
+        None
+    }
+
+    fn extract_string_dict(dict: &ast::ExprDict) -> Option<HashMap<String, String>> {
+        let mut map = HashMap::new();
+        for item in &dict.items {
+            if let Some(key) = &item.key {
+                match (
+                    Self::extract_string_literal(key),
+                    Self::extract_string_literal(&item.value),
+                ) {
+                    (Some(k), Some(v)) => {
+                        map.insert(k.to_string(), v.to_string());
+                    }
+                    _ => return None, // Non-literal key or value
+                }
+            }
+        }
+        Some(map)
+    }
+
+    /// Create a synthetic inferred schema and register it. Returns the schema name.
+    fn make_inferred_schema(&mut self, cols: Vec<String>, var: &str, line: usize) -> String {
+        let name = format!("__inferred_{}_at_{}", var, line);
+        self.schemas.insert(name.clone(), cols);
+        name
+    }
+
     fn visit_stmt(&mut self, stmt: &Stmt, errors: &mut Vec<LintError>) {
         match stmt {
             Stmt::ClassDef(class_def) => {
@@ -743,6 +948,7 @@ impl Linter {
                                     "Column name '{}' in {} conflicts with a pandas/polars method. This will shadow the method when accessed via attribute syntax (df.{}). Consider renaming to '{}_value' or similar.",
                                     col_name, class_def.name, col_name, col_name
                                 ),
+                                severity: "error".to_string(),
                             });
                         }
                     }
@@ -779,9 +985,99 @@ impl Linter {
                                                 line: current_line,
                                                 col: current_col,
                                                 message: format!("Column '{}' does not exist in {} (mutation tracking)", col_name, schema_name),
+                                                severity: "error".to_string(),
                                             });
                                             columns.push(col_name.to_string());
                                         }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // A. Multi-column subscript: a = b[["foo", "bar"]]
+                if let Expr::Subscript(sub) = &*assign.value {
+                    if let Expr::Name(base_name) = &*sub.value {
+                        let base_str = base_name.id.as_str();
+                        match Self::extract_string_list(&sub.slice) {
+                            Some(cols) => {
+                                let base_info =
+                                    self.variables.get(base_str).map(|(s, l)| (s.clone(), *l));
+                                if let Some((base_schema, base_def_line)) = &base_info {
+                                    let base_cols =
+                                        self.schemas.get(base_schema).cloned().unwrap_or_default();
+                                    if !base_cols.is_empty() {
+                                        for col in &cols {
+                                            if !base_cols.contains(col) {
+                                                let schema_display =
+                                                    if base_schema.starts_with("__inferred_") {
+                                                        format!(
+                                                        "inferred column set (defined at line {})",
+                                                        base_def_line
+                                                    )
+                                                    } else {
+                                                        format!(
+                                                            "{} (defined at line {})",
+                                                            base_schema, base_def_line
+                                                        )
+                                                    };
+                                                errors.push(LintError {
+                                                    line: current_line,
+                                                    col: current_col,
+                                                    message: format!(
+                                                        "Column '{}' does not exist in {}",
+                                                        col, schema_display
+                                                    ),
+                                                    severity: "error".to_string(),
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+                                let target_names: Vec<String> = assign
+                                    .targets
+                                    .iter()
+                                    .filter_map(|t| {
+                                        if let Expr::Name(n) = t {
+                                            Some(n.id.to_string())
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .collect();
+                                let var_name = target_names
+                                    .first()
+                                    .map(|s| s.as_str())
+                                    .unwrap_or("unknown");
+                                let schema_name =
+                                    self.make_inferred_schema(cols, var_name, current_line);
+                                for name in &target_names {
+                                    self.variables
+                                        .insert(name.clone(), (schema_name.clone(), current_line));
+                                }
+                            }
+                            None => {
+                                // Boolean mask / unknown — passthrough base schema to target
+                                if let Some((base_schema, _)) =
+                                    self.variables.get(base_str).map(|(s, l)| (s.clone(), *l))
+                                {
+                                    let target_names: Vec<String> = assign
+                                        .targets
+                                        .iter()
+                                        .filter_map(|t| {
+                                            if let Expr::Name(n) = t {
+                                                Some(n.id.to_string())
+                                            } else {
+                                                None
+                                            }
+                                        })
+                                        .collect();
+                                    for name in &target_names {
+                                        self.variables.insert(
+                                            name.clone(),
+                                            (base_schema.clone(), current_line),
+                                        );
                                     }
                                 }
                             }
@@ -840,10 +1136,7 @@ impl Linter {
                             } else if func_name == "from_schema"
                                 || func_name == "from_pandas"
                                 || func_name == "from_polars"
-                                || func_name == "read_csv"
-                                || func_name == "read_parquet"
-                                || func_name == "read_json"
-                                || func_name == "read_excel"
+                                || LOAD_FUNCTIONS.contains(&func_name)
                             {
                                 // PandasFrame.from_schema(df, Schema) or Schema.from_pandas(df)
                                 if let Expr::Attribute(inner_attr) = &*attr.value {
@@ -869,16 +1162,344 @@ impl Linter {
                                         }
                                     }
                                 } else if let Expr::Name(class_name) = &*attr.value {
-                                    // Schema.from_pandas(df) style
-                                    if self.schemas.contains_key(class_name.id.as_str()) {
+                                    let class_str = class_name.id.as_str();
+                                    if self.schemas.contains_key(class_str) {
+                                        // Schema.from_pandas(df) style
                                         for target in &assign.targets {
                                             if let Expr::Name(target_name) = target {
                                                 self.variables.insert(
                                                     target_name.id.to_string(),
-                                                    (class_name.id.to_string(), current_line),
+                                                    (class_str.to_string(), current_line),
                                                 );
                                             }
                                         }
+                                    } else if LOAD_MODULES.contains(&class_str)
+                                        && LOAD_FUNCTIONS.contains(&func_name)
+                                    {
+                                        // pd.read_csv() / pl.scan_parquet() etc.
+                                        match Self::extract_load_columns(call) {
+                                            Some(cols) => {
+                                                let target_names: Vec<String> = assign
+                                                    .targets
+                                                    .iter()
+                                                    .filter_map(|t| {
+                                                        if let Expr::Name(n) = t {
+                                                            Some(n.id.to_string())
+                                                        } else {
+                                                            None
+                                                        }
+                                                    })
+                                                    .collect();
+                                                let var_name = target_names
+                                                    .first()
+                                                    .map(|s| s.as_str())
+                                                    .unwrap_or("df");
+                                                let schema_name = self.make_inferred_schema(
+                                                    cols,
+                                                    var_name,
+                                                    current_line,
+                                                );
+                                                for name in &target_names {
+                                                    self.variables.insert(
+                                                        name.clone(),
+                                                        (schema_name.clone(), current_line),
+                                                    );
+                                                }
+                                            }
+                                            None => {
+                                                errors.push(LintError {
+                                                    line: current_line,
+                                                    col: current_col,
+                                                    message: "columns unknown at lint time; \
+                                                              specify `usecols`/`columns` or \
+                                                              annotate: `df: PandasFrame[MySchema] \
+                                                              = pd.read_csv(...)`"
+                                                        .to_string(),
+                                                    severity: "warning".to_string(),
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+                            } else if ROW_PASSTHROUGH_METHODS.contains(&func_name) {
+                                // Row-preserving ops: propagate base schema unchanged
+                                if let Expr::Name(recv) = &*attr.value {
+                                    if let Some((base_schema, _)) =
+                                        self.variables.get(recv.id.as_str())
+                                    {
+                                        let base_schema = base_schema.clone();
+                                        for target in &assign.targets {
+                                            if let Expr::Name(target_name) = target {
+                                                self.variables.insert(
+                                                    target_name.id.to_string(),
+                                                    (base_schema.clone(), current_line),
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                            } else if func_name == "select" {
+                                if let Expr::Name(recv) = &*attr.value {
+                                    let recv_str = recv.id.as_str();
+                                    let base_info =
+                                        self.variables.get(recv_str).map(|(s, l)| (s.clone(), *l));
+                                    let base_cols = base_info
+                                        .as_ref()
+                                        .and_then(|(s, _)| self.schemas.get(s).cloned());
+                                    let selected_cols = call
+                                        .arguments
+                                        .args
+                                        .first()
+                                        .and_then(Self::extract_string_list);
+                                    match selected_cols {
+                                        Some(cols) => {
+                                            if let Some(ref bc) = base_cols {
+                                                for col in &cols {
+                                                    if !bc.contains(col) {
+                                                        let schema_display = base_info
+                                                            .as_ref()
+                                                            .map(|(s, l)| {
+                                                                if s.starts_with("__inferred_") {
+                                                                    format!("inferred column set (defined at line {})", l)
+                                                                } else {
+                                                                    format!("{} (defined at line {})", s, l)
+                                                                }
+                                                            })
+                                                            .unwrap_or_else(|| "unknown".to_string());
+                                                        errors.push(LintError {
+                                                            line: current_line,
+                                                            col: current_col,
+                                                            message: format!(
+                                                                "Column '{}' does not exist in {}",
+                                                                col, schema_display
+                                                            ),
+                                                            severity: "error".to_string(),
+                                                        });
+                                                    }
+                                                }
+                                            }
+                                            let target_names: Vec<String> = assign
+                                                .targets
+                                                .iter()
+                                                .filter_map(|t| {
+                                                    if let Expr::Name(n) = t {
+                                                        Some(n.id.to_string())
+                                                    } else {
+                                                        None
+                                                    }
+                                                })
+                                                .collect();
+                                            let var_name = target_names
+                                                .first()
+                                                .map(|s| s.as_str())
+                                                .unwrap_or("unknown");
+                                            let schema_name = self.make_inferred_schema(
+                                                cols,
+                                                var_name,
+                                                current_line,
+                                            );
+                                            for name in &target_names {
+                                                self.variables.insert(
+                                                    name.clone(),
+                                                    (schema_name.clone(), current_line),
+                                                );
+                                            }
+                                        }
+                                        None => {
+                                            if let Some((base_schema, _)) = base_info {
+                                                for target in &assign.targets {
+                                                    if let Expr::Name(target_name) = target {
+                                                        self.variables.insert(
+                                                            target_name.id.to_string(),
+                                                            (base_schema.clone(), current_line),
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } else if func_name == "drop" {
+                                if let Expr::Name(recv) = &*attr.value {
+                                    let recv_str = recv.id.as_str();
+                                    let base_info =
+                                        self.variables.get(recv_str).map(|(s, l)| (s.clone(), *l));
+                                    let base_cols = base_info
+                                        .as_ref()
+                                        .and_then(|(s, _)| self.schemas.get(s).cloned());
+                                    let dropped = Self::extract_drop_columns(call);
+                                    match (base_cols, dropped) {
+                                        (Some(base_cols), Some(dropped_cols)) => {
+                                            for col in &dropped_cols {
+                                                if !base_cols.contains(col) {
+                                                    let schema_display = base_info
+                                                        .as_ref()
+                                                        .map(|(s, l)| {
+                                                            if s.starts_with("__inferred_") {
+                                                                format!("inferred column set (defined at line {})", l)
+                                                            } else {
+                                                                format!("{} (defined at line {})", s, l)
+                                                            }
+                                                        })
+                                                        .unwrap_or_else(|| "unknown".to_string());
+                                                    errors.push(LintError {
+                                                        line: current_line,
+                                                        col: current_col,
+                                                        message: format!(
+                                                            "Dropped column '{}' does not exist in {}",
+                                                            col, schema_display
+                                                        ),
+                                                        severity: "warning".to_string(),
+                                                    });
+                                                }
+                                            }
+                                            let new_cols: Vec<String> = base_cols
+                                                .into_iter()
+                                                .filter(|c| !dropped_cols.contains(c))
+                                                .collect();
+                                            let target_names: Vec<String> = assign
+                                                .targets
+                                                .iter()
+                                                .filter_map(|t| {
+                                                    if let Expr::Name(n) = t {
+                                                        Some(n.id.to_string())
+                                                    } else {
+                                                        None
+                                                    }
+                                                })
+                                                .collect();
+                                            let var_name = target_names
+                                                .first()
+                                                .map(|s| s.as_str())
+                                                .unwrap_or("unknown");
+                                            let schema_name = self.make_inferred_schema(
+                                                new_cols,
+                                                var_name,
+                                                current_line,
+                                            );
+                                            for name in &target_names {
+                                                self.variables.insert(
+                                                    name.clone(),
+                                                    (schema_name.clone(), current_line),
+                                                );
+                                            }
+                                        }
+                                        _ => {
+                                            // Can't extract cols or no base — passthrough base
+                                            if let Some((base_schema, _)) = base_info {
+                                                for target in &assign.targets {
+                                                    if let Expr::Name(target_name) = target {
+                                                        self.variables.insert(
+                                                            target_name.id.to_string(),
+                                                            (base_schema.clone(), current_line),
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } else if func_name == "rename" {
+                                if let Expr::Name(recv) = &*attr.value {
+                                    let recv_str = recv.id.as_str();
+                                    let base_info =
+                                        self.variables.get(recv_str).map(|(s, l)| (s.clone(), *l));
+                                    let base_cols = base_info
+                                        .as_ref()
+                                        .and_then(|(s, _)| self.schemas.get(s).cloned());
+                                    let mapping = Self::extract_rename_mapping(call);
+                                    match (base_cols, mapping) {
+                                        (Some(base_cols), Some(mapping)) => {
+                                            let new_cols: Vec<String> = base_cols
+                                                .iter()
+                                                .map(|c| {
+                                                    mapping
+                                                        .get(c)
+                                                        .cloned()
+                                                        .unwrap_or_else(|| c.clone())
+                                                })
+                                                .collect();
+                                            let target_names: Vec<String> = assign
+                                                .targets
+                                                .iter()
+                                                .filter_map(|t| {
+                                                    if let Expr::Name(n) = t {
+                                                        Some(n.id.to_string())
+                                                    } else {
+                                                        None
+                                                    }
+                                                })
+                                                .collect();
+                                            let var_name = target_names
+                                                .first()
+                                                .map(|s| s.as_str())
+                                                .unwrap_or("unknown");
+                                            let schema_name = self.make_inferred_schema(
+                                                new_cols,
+                                                var_name,
+                                                current_line,
+                                            );
+                                            for name in &target_names {
+                                                self.variables.insert(
+                                                    name.clone(),
+                                                    (schema_name.clone(), current_line),
+                                                );
+                                            }
+                                        }
+                                        _ => {
+                                            if let Some((base_schema, _)) = base_info {
+                                                for target in &assign.targets {
+                                                    if let Expr::Name(target_name) = target {
+                                                        self.variables.insert(
+                                                            target_name.id.to_string(),
+                                                            (base_schema.clone(), current_line),
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } else if func_name == "assign" {
+                                if let Expr::Name(recv) = &*attr.value {
+                                    let recv_str = recv.id.as_str();
+                                    let base_info =
+                                        self.variables.get(recv_str).map(|(s, _)| s.clone());
+                                    let mut new_cols: Vec<String> = base_info
+                                        .as_ref()
+                                        .and_then(|s| self.schemas.get(s).cloned())
+                                        .unwrap_or_default();
+                                    for keyword in &call.arguments.keywords {
+                                        if let Some(kw_name) =
+                                            keyword.arg.as_ref().map(|s| s.as_str())
+                                        {
+                                            if !new_cols.contains(&kw_name.to_string()) {
+                                                new_cols.push(kw_name.to_string());
+                                            }
+                                        }
+                                    }
+                                    let target_names: Vec<String> = assign
+                                        .targets
+                                        .iter()
+                                        .filter_map(|t| {
+                                            if let Expr::Name(n) = t {
+                                                Some(n.id.to_string())
+                                            } else {
+                                                None
+                                            }
+                                        })
+                                        .collect();
+                                    let var_name = target_names
+                                        .first()
+                                        .map(|s| s.as_str())
+                                        .unwrap_or("unknown");
+                                    let schema_name =
+                                        self.make_inferred_schema(new_cols, var_name, current_line);
+                                    for name in &target_names {
+                                        self.variables.insert(
+                                            name.clone(),
+                                            (schema_name.clone(), current_line),
+                                        );
                                     }
                                 }
                             }
@@ -1012,6 +1633,7 @@ impl Linter {
                 for target in &assign.targets {
                     self.visit_expr(target, errors);
                 }
+                self.visit_expr(&assign.value, errors);
             }
             Stmt::AnnAssign(ann_assign) => {
                 let (current_line, _) = self.source_location(ann_assign.range().start());
@@ -1193,14 +1815,27 @@ impl Linter {
                                 && !RESERVED_METHODS.contains(&attr_name)
                             {
                                 let (line, col) = self.source_location(attr.range().start());
+                                let schema_display = if schema_name.starts_with("__inferred_") {
+                                    format!(
+                                        "inferred column set (defined at line {})",
+                                        defined_line
+                                    )
+                                } else {
+                                    format!("{} (defined at line {})", schema_name, defined_line)
+                                };
                                 let mut message = format!(
-                                    "Column '{}' does not exist in {} (defined at line {})",
-                                    attr_name, schema_name, defined_line
+                                    "Column '{}' does not exist in {}",
+                                    attr_name, schema_display
                                 );
                                 if let Some(suggestion) = find_best_match(attr_name, columns) {
                                     message.push_str(&format!(" (did you mean '{}'?)", suggestion));
                                 }
-                                errors.push(LintError { line, col, message });
+                                errors.push(LintError {
+                                    line,
+                                    col,
+                                    message,
+                                    severity: "error".to_string(),
+                                });
                             }
                         }
                     }
@@ -1216,9 +1851,20 @@ impl Linter {
                                 if !columns.iter().any(|c| c == col_name) {
                                     let (line, col) =
                                         self.source_location(subscript.range().start());
+                                    let schema_display = if schema_name.starts_with("__inferred_") {
+                                        format!(
+                                            "inferred column set (defined at line {})",
+                                            defined_line
+                                        )
+                                    } else {
+                                        format!(
+                                            "{} (defined at line {})",
+                                            schema_name, defined_line
+                                        )
+                                    };
                                     let mut message = format!(
-                                        "Column '{}' does not exist in {} (defined at line {})",
-                                        col_name, schema_name, defined_line
+                                        "Column '{}' does not exist in {}",
+                                        col_name, schema_display
                                     );
                                     if let Some(suggestion) = find_best_match(col_name, columns) {
                                         message.push_str(&format!(
@@ -1226,7 +1872,12 @@ impl Linter {
                                             suggestion
                                         ));
                                     }
-                                    errors.push(LintError { line, col, message });
+                                    errors.push(LintError {
+                                        line,
+                                        col,
+                                        message,
+                                        severity: "error".to_string(),
+                                    });
                                 }
                             }
                         }
