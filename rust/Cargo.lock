@@ -821,6 +821,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a96887878f22d7bad8a3b6dc5b7440e0ada9a245242924394987b21cf2210a4c"
 
 [[package]]
+name = "rmp"
+version = "0.8.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ba8be72d372b2c9b35542551678538b562e7cf86c3315773cae48dfbfe7790c"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
+name = "rmp-serde"
+version = "1.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72f81bee8c8ef9b577d1681a70ebbc962c232461e397b22c208c43c04b67a155"
+dependencies = [
+ "rmp",
+ "serde",
+]
+
+[[package]]
 name = "ruff_python_ast"
 version = "0.0.0"
 source = "git+https://github.com/astral-sh/ruff?tag=0.15.0#ce5f7b6127a5d684e96fd0f8e387f73c41c7a1b0"
@@ -1119,6 +1138,7 @@ dependencies = [
  "anyhow",
  "criterion",
  "pyo3",
+ "rmp-serde",
  "ruff_python_ast",
  "ruff_python_parser",
  "ruff_source_file",

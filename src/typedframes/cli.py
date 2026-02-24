@@ -18,7 +18,7 @@ def _collect_python_files(path: Path) -> list[Path]:
     return sorted(path.rglob("*.py"))
 
 
-def _check_files(files: list[Path], *, use_index: bool = True) -> list[dict]:
+def _check_files(files: list[Path], *, index_bytes: bytes | None = None) -> list[dict]:
     """Run the Rust checker on each file, returning all errors with file paths."""
     try:
         from typedframes._rust_checker import check_file  # ty: ignore[unresolved-import]
@@ -32,7 +32,7 @@ def _check_files(files: list[Path], *, use_index: bool = True) -> list[dict]:
 
     all_errors = []
     for file_path in files:
-        result_json = check_file(str(file_path), use_index)
+        result_json = check_file(str(file_path), index_bytes)
         errors = json.loads(result_json)
         for error in errors:
             error["file"] = str(file_path)
@@ -105,18 +105,18 @@ def _run_check(args: argparse.Namespace) -> None:
         print(f"Error: path does not exist: {path}", file=sys.stderr)
         sys.exit(2)
 
-    use_index = not args.no_index
-    if path.is_dir() and use_index:
+    index_bytes: bytes | None = None
+    if path.is_dir() and not args.no_index:
         try:
             from typedframes._rust_checker import build_project_index  # ty: ignore[unresolved-import]
 
-            build_project_index(str(path))
+            index_bytes = build_project_index(str(path))
         except ImportError:
             pass
 
     files = _collect_python_files(path)
     start = time.perf_counter()
-    all_errors = _check_files(files, use_index=use_index)
+    all_errors = _check_files(files, index_bytes=index_bytes)
     elapsed = time.perf_counter() - start
 
     if args.no_warnings:

@@ -33,8 +33,8 @@ class TestTypedFramesCheckerIntegration(unittest.TestCase):
         # assert
         self.assertIn("did you mean 'user_id'?", result)
 
-    def test_should_track_mutations(self) -> None:
-        """Test that the checker tracks column mutations."""
+    def test_should_catch_polars_column_errors(self) -> None:
+        """Test that the checker catches column errors in polars examples."""
         # arrange
         example_file = str(Path("examples/typedframes_example.py").absolute())
 
@@ -42,7 +42,7 @@ class TestTypedFramesCheckerIntegration(unittest.TestCase):
         result = check_file(example_file)
 
         # assert
-        self.assertIn("mutation tracking", result)
+        self.assertIn("typo_column", result)
 
     def test_should_run_via_python_extension(self) -> None:
         """Test that the Rust checker works via Python extension."""
@@ -83,7 +83,7 @@ class BadSchema(BaseSchema):
         Path(temp_file).unlink()
 
     def test_should_build_project_index_with_schema_entries(self) -> None:
-        """Test that build_project_index returns valid JSON containing schema column data."""
+        """Test that build_project_index returns MessagePack bytes and the index is usable."""
         # arrange
         schema_source = """
 from typedframes import BaseSchema, Column
@@ -98,19 +98,14 @@ class ProductSchema(BaseSchema):
             schema_path.write_text(schema_source)
 
             # act
-            result_json = build_project_index(tmpdir)
-            index = json.loads(result_json)
+            index_bytes = build_project_index(tmpdir)
 
-            # assert
-            self.assertIn("version", index)
-            self.assertIn("files", index)
-            schema_entries = {k: v for k, v in index["files"].items() if k.endswith("schema.py")}
-            self.assertEqual(len(schema_entries), 1)
-            entry = next(iter(schema_entries.values()))
-            self.assertIn("ProductSchema", entry["schemas"])
-            self.assertIn("product_id", entry["schemas"]["ProductSchema"])
-            self.assertIn("name", entry["schemas"]["ProductSchema"])
-            self.assertIn("price", entry["schemas"]["ProductSchema"])
+            # assert — bytes sanity check
+            self.assertIsInstance(index_bytes, bytes)
+            self.assertGreater(len(index_bytes), 0)
+            # functional check: schema file itself has no column-access errors
+            result = check_file(str(schema_path), index_bytes)
+            self.assertEqual(json.loads(result), [])
 
     def test_should_catch_cross_file_column_error(self) -> None:
         """Test that the checker catches column errors when the schema is defined in another file."""
@@ -140,8 +135,8 @@ print(df["wrong_column"])
             (root / "pyproject.toml").write_text("[tool.typedframes]\nenabled = true\n")
 
             # act
-            build_project_index(tmpdir)
-            result = check_file(str(root / "pipeline.py"))
+            index_bytes = build_project_index(tmpdir)
+            result = check_file(str(root / "pipeline.py"), index_bytes)
             errors = json.loads(result)
 
             # assert
@@ -172,7 +167,7 @@ _ = a["foo"]
 
         try:
             # act
-            result = check_file(temp_file, use_index=False)
+            result = check_file(temp_file, None)
             errors = json.loads(result)
 
             # assert — "baz" not in slice, "foo" is fine
@@ -202,7 +197,7 @@ a = df[["foo", "missing"]]
 
         try:
             # act
-            result = check_file(temp_file, use_index=False)
+            result = check_file(temp_file, None)
             errors = json.loads(result)
 
             # assert
@@ -231,7 +226,7 @@ _ = filtered["nonexistent"]
 
         try:
             # act
-            result = check_file(temp_file, use_index=False)
+            result = check_file(temp_file, None)
             errors = json.loads(result)
 
             # assert
@@ -262,7 +257,7 @@ _ = small["bar"]
 
         try:
             # act
-            result = check_file(temp_file, use_index=False)
+            result = check_file(temp_file, None)
             errors = json.loads(result)
 
             # assert — "bar" not in select, "foo" is fine
@@ -295,7 +290,7 @@ _ = trimmed["foo"]
 
         try:
             # act
-            result = check_file(temp_file, use_index=False)
+            result = check_file(temp_file, None)
             errors = json.loads(result)
 
             # assert — "baz" dropped, "foo" ok
@@ -325,7 +320,7 @@ trimmed = df.drop(columns=["nonexistent"])
 
         try:
             # act
-            result = check_file(temp_file, use_index=False)
+            result = check_file(temp_file, None)
             errors = json.loads(result)
 
             # assert
@@ -356,7 +351,7 @@ _ = renamed["bar"]
 
         try:
             # act
-            result = check_file(temp_file, use_index=False)
+            result = check_file(temp_file, None)
             errors = json.loads(result)
 
             # assert — "foo" renamed to "bar", so "foo" should error
@@ -388,7 +383,7 @@ _ = augmented["missing"]
 
         try:
             # act
-            result = check_file(temp_file, use_index=False)
+            result = check_file(temp_file, None)
             errors = json.loads(result)
 
             # assert — new_col and old are fine; missing errors
@@ -415,7 +410,7 @@ _ = df["c"]
 
         try:
             # act
-            result = check_file(temp_file, use_index=False)
+            result = check_file(temp_file, None)
             errors = json.loads(result)
 
             # assert — "c" not in usecols, "a" is fine
@@ -439,7 +434,7 @@ df = pd.read_csv("x.csv")
 
         try:
             # act
-            result = check_file(temp_file, use_index=False)
+            result = check_file(temp_file, None)
             errors = json.loads(result)
 
             # assert
@@ -471,7 +466,7 @@ _ = df["c"]
 
         try:
             # act
-            result = check_file(temp_file, use_index=False)
+            result = check_file(temp_file, None)
             errors = json.loads(result)
 
             # assert — no W001; "c" errors from schema; no warning for "a"
@@ -506,7 +501,7 @@ _ = b["baz"]
 
         try:
             # act
-            result = check_file(temp_file, use_index=False)
+            result = check_file(temp_file, None)
             errors = json.loads(result)
 
             # assert — "foo" ok through chain; "baz" not in slice so errors

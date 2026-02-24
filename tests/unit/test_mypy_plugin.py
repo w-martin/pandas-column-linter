@@ -204,3 +204,21 @@ class TestTypedFramesPluginUnit(unittest.TestCase):
 
         # assert
         self.assertEqual(result, TypedFramesPlugin)
+
+    def test_should_cache_index_bytes_by_project_root(self) -> None:
+        """Test that _get_index_bytes returns cached bytes on the second call."""
+        # arrange
+        mock_build = MagicMock(return_value=b"fake-msgpack")
+        new_plugin = TypedFramesPlugin(Options())
+
+        with patch.dict(sys.modules, {"typedframes._rust_checker": MagicMock(build_project_index=mock_build)}):
+            root = Path("/some/project")
+
+            # act
+            first = new_plugin._get_index_bytes(root)
+            second = new_plugin._get_index_bytes(root)
+
+        # assert — build called once; both calls return the same bytes
+        mock_build.assert_called_once()
+        self.assertEqual(first, b"fake-msgpack")
+        self.assertEqual(second, b"fake-msgpack")

@@ -433,7 +433,7 @@ typedframes for comprehensive type checking:
 - **[mypy](https://mypy-lang.org/)** (v1.19.1): The original Python type checker. typedframes provides a mypy plugin for
   column checking. See [performance benchmarks](#static-analysis-performance).
 
-- **[ty](https://github.com/astral-sh/ty)** (v0.0.14, Astral): New Rust-based type checker, 10-60x faster than mypy on
+- **[ty](https://github.com/astral-sh/ty)** (v0.0.16, Astral): New Rust-based type checker, 10-60x faster than mypy on
   large codebases. Does not support mypy plugins—use typedframes standalone checker.
 
 - **[pyrefly](https://pyrefly.org/)** (v0.51.1, Meta): Rust-based type checker from Meta, replacement for Pyre. Fast,

@@ -48,12 +48,25 @@ class TypedFramesPlugin(Plugin):
         """Initialize the plugin."""
         super().__init__(*args, **kwargs)
         self._checker_results: dict[str, list[dict[str, Any]]] = {}
+        self._index_bytes_by_root: dict[str, bytes | None] = {}
 
-    def _run_via_extension(self, file_path: str) -> list[dict[str, Any]]:
+    def _get_index_bytes(self, project_root: Path) -> bytes | None:
+        """Build and cache the project index as MessagePack bytes, keyed by project root."""
+        key = str(project_root)
+        if key not in self._index_bytes_by_root:
+            try:
+                from typedframes._rust_checker import build_project_index  # ty: ignore[unresolved-import]
+
+                self._index_bytes_by_root[key] = build_project_index(str(project_root))
+            except ImportError:
+                self._index_bytes_by_root[key] = None
+        return self._index_bytes_by_root[key]
+
+    def _run_via_extension(self, file_path: str, index_bytes: bytes | None) -> list[dict[str, Any]]:
         """Run the checker via the Rust extension module."""
         from typedframes._rust_checker import check_file  # ty: ignore[unresolved-import]
 
-        result_json = str(check_file(file_path))
+        result_json = str(check_file(file_path, index_bytes))
         return json.loads(result_json)
 
     def _run_checker(self, file_path: str) -> list[dict[str, Any]]:
@@ -68,8 +81,10 @@ class TypedFramesPlugin(Plugin):
         if not is_enabled(project_root):
             return []
 
+        index_bytes = self._get_index_bytes(project_root)
+
         try:
-            errors = self._run_via_extension(file_path)
+            errors = self._run_via_extension(file_path, index_bytes)
         except ImportError as e:
             msg = (
                 "typedframes checker extension not found. "

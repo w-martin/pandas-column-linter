@@ -71,8 +71,8 @@ def load_with_usecols() -> None:
 
 
 def load_polars_with_columns() -> None:
-    """Polars scan_csv with schema= — checker infers column set."""
-    df = pl.scan_csv("users.csv", schema={"user_id": pl.Int64, "email": pl.String})
+    """Polars read_csv with columns= — checker infers column set."""
+    df = pl.read_csv("users.csv", columns=["user_id", "email"])
     print(df["user_id"])
     # Accessing df["age"] would error: 'age' not in inferred column set
 

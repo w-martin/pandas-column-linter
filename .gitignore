@@ -31,4 +31,3 @@ coverage.json
 **/target
 docs
 .coverage*
-.typedframes_cache

@@ -7,11 +7,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::UNIX_EPOCH;
-
 #[pyfunction]
-#[pyo3(signature = (file_path, use_index = true))]
-fn check_file(file_path: String, use_index: bool) -> PyResult<String> {
+#[pyo3(signature = (file_path, index_bytes = None))]
+fn check_file(file_path: String, index_bytes: Option<Vec<u8>>) -> PyResult<String> {
     let path = Path::new(&file_path);
     let project_root = find_project_root(path);
     let config = load_linter_config(&project_root);
@@ -25,9 +23,8 @@ fn check_file(file_path: String, use_index: bool) -> PyResult<String> {
 
     let mut linter = Linter::new();
 
-    if use_index {
-        let cache_dir = project_root.join(".typedframes_cache");
-        if let Some(index) = load_index(&cache_dir) {
+    if let Some(bytes) = index_bytes {
+        if let Ok(index) = rmp_serde::from_slice::<ProjectIndex>(&bytes) {
             linter.load_cross_file_symbols(&index, &source, path, &project_root);
         }
     }
@@ -45,13 +42,10 @@ fn check_file(file_path: String, use_index: bool) -> PyResult<String> {
 }
 
 #[pyfunction]
-fn build_project_index(project_root: String) -> PyResult<String> {
+fn build_project_index(project_root: String) -> PyResult<Vec<u8>> {
     let root = Path::new(&project_root);
     let index = build_index_internal(root);
-    let cache_dir = root.join(".typedframes_cache");
-    save_index(&index, &cache_dir)
-        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("{}", e)))?;
-    serde_json::to_string(&index)
+    rmp_serde::to_vec(&index)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("{}", e)))
 }
 
@@ -145,7 +139,6 @@ struct IndexFunction {
 
 #[derive(Serialize, Deserialize)]
 struct IndexEntry {
-    mtime: u64,
     schemas: HashMap<String, Vec<String>>,
     functions: HashMap<String, IndexFunction>,
     exports: Vec<String>,
@@ -185,12 +178,6 @@ fn collect_py_files(dir: &Path) -> Vec<PathBuf> {
 
 fn index_file(path: &Path) -> Option<IndexEntry> {
     let source = fs::read_to_string(path).ok()?;
-    let mtime = fs::metadata(path)
-        .ok()
-        .and_then(|m| m.modified().ok())
-        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
 
     let mut linter = Linter::new();
     let _ = linter.check_file_internal(&source, path);
@@ -241,7 +228,6 @@ fn index_file(path: &Path) -> Option<IndexEntry> {
         .unwrap_or_default();
 
     Some(IndexEntry {
-        mtime,
         schemas,
         functions,
         exports,
@@ -259,18 +245,6 @@ fn build_index_internal(project_root: &Path) -> ProjectIndex {
         }
     }
     ProjectIndex { version: 1, files }
-}
-
-fn save_index(index: &ProjectIndex, cache_dir: &Path) -> Result<(), anyhow::Error> {
-    fs::create_dir_all(cache_dir)?;
-    let json = serde_json::to_string_pretty(index)?;
-    fs::write(cache_dir.join("index.json"), json)?;
-    Ok(())
-}
-
-fn load_index(cache_dir: &Path) -> Option<ProjectIndex> {
-    let content = fs::read_to_string(cache_dir.join("index.json")).ok()?;
-    serde_json::from_str(&content).ok()
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -1890,7 +1864,14 @@ impl Linter {
                 for arg in call.arguments.args.iter() {
                     self.visit_expr(arg, errors);
                 }
-                self.visit_expr(&call.func, errors);
+                // When the callee is `receiver.method(...)`, do not check the method name
+                // as a column access — only recurse into the receiver so that any column
+                // accesses nested there (e.g. `df.col.method()`) are still found.
+                if let Expr::Attribute(attr) = &*call.func {
+                    self.visit_expr(&attr.value, errors);
+                } else {
+                    self.visit_expr(&call.func, errors);
+                }
             }
             _ => {}
         }
@@ -2106,5 +2087,30 @@ x = 1
             .check_file_internal(source, Path::new("test.py"))
             .unwrap();
         assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_no_false_positive_on_method_call_name() {
+        // `df.assign(created_at="2024-01-01")` must NOT raise
+        // "Column 'assign' does not exist" — method names are not column accesses.
+        let source = r#"
+from typedframes import BaseSchema, Column
+from typedframes.pandas import PandasFrame
+
+class UserData(BaseSchema):
+    user_id = Column(type=int)
+    email = Column(type=str)
+
+import pandas as pd
+
+df: PandasFrame[UserData] = pd.read_csv("users.csv")
+augmented = df.assign(created_at="2024-01-01")
+print(augmented["user_id"])
+"#;
+        let mut linter = Linter::new();
+        let errors = linter
+            .check_file_internal(source, Path::new("test.py"))
+            .unwrap();
+        assert!(errors.is_empty(), "unexpected errors: {errors:?}");
     }
 }

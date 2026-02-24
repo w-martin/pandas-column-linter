@@ -36,6 +36,7 @@ ruff_source_file = { git = "https://github.com/astral-sh/ruff", tag = "0.15.0" }
 ruff_text_size = { git = "https://github.com/astral-sh/ruff", tag = "0.15.0" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+rmp-serde = "1"
 anyhow = "1.0"
 toml = "0.8"
 pyo3 = { version = "0.23", features = ["extension-module", "abi3-py311"] }

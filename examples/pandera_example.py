@@ -38,7 +38,8 @@ def main() -> None:
 
     # Issue 1: Accessing non-existent column
     users = load_users()
-    # 'name' column doesn't exist in UserSchema
+    # 'name' column doesn't exist in UserSchema — pandera/mypy miss this
+    print(users["name"])  # typedframes: E001 Column 'name' does not exist in UserSchema
 
     # Issue 2: Mutation breaks tracking
     users = load_users()  # Has UserSchema
@@ -47,5 +48,5 @@ def main() -> None:
 
     # Issue 3: Column name typo
     users = load_users()
-    # DESIRED: Error: Column 'emai' does not exist in UserSchema
-    # (did you mean 'email'?)
+    # pandera/mypy miss this typo — typedframes catches it
+    print(users["emai"])  # typedframes: E001 Column 'emai' does not exist in UserSchema
