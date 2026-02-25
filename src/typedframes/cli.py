@@ -60,7 +60,12 @@ def main(argv: list[str] | None = None) -> None:
     check_parser.add_argument("--json", dest="json_output", action="store_true", help="Output results as JSON.")
     check_parser.add_argument("--no-index", action="store_true", help="Disable cross-file index.")
     check_parser.add_argument(
-        "--no-warnings", action="store_true", help="Suppress all warnings (W001, W002). Overrides pyproject.toml."
+        "--no-warnings", action="store_true", help="Suppress all warnings (W002 and any enabled ingestion warnings)."
+    )
+    check_parser.add_argument(
+        "--strict-ingest",
+        action="store_true",
+        help="Include W001 warnings for unannotated DataFrame ingestion (e.g. pd.read_csv without usecols).",
     )
 
     args = parser.parse_args(argv)
@@ -118,6 +123,9 @@ def _run_check(args: argparse.Namespace) -> None:
     start = time.perf_counter()
     all_errors = _check_files(files, index_bytes=index_bytes)
     elapsed = time.perf_counter() - start
+
+    if not args.strict_ingest:
+        all_errors = [e for e in all_errors if e.get("code") != "W001"]
 
     if args.no_warnings:
         all_errors = [e for e in all_errors if e.get("severity") != "warning"]

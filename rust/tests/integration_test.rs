@@ -333,3 +333,149 @@ def main():
         .message
         .contains("Column 'missing' does not exist in UserSchema")));
 }
+
+#[test]
+fn test_should_validate_rename_columns_exist() {
+    // arrange
+    let mut linter = Linter::new();
+    let source = r#"
+from typedframes import BaseSchema, Column
+
+class UserSchema(BaseSchema):
+    user_id = Column(type=int)
+    email = Column(type=str)
+
+def main():
+    df: DataFrame[UserSchema] = load()
+    df2 = df.rename(columns={"nonexistent": "new_name"})
+"#;
+    let dir = tempdir().unwrap();
+    let file_path = dir.path().join("test_rename.py");
+    fs::write(&file_path, source).unwrap();
+
+    // act
+    let errors = linter.check_file_internal(source, &file_path).unwrap();
+
+    // assert
+    assert!(!errors.is_empty());
+    assert!(errors.iter().any(|e| {
+        e.message.contains("Column 'nonexistent' does not exist") && e.message.contains("rename")
+    }));
+}
+
+#[test]
+fn test_should_track_del_statement() {
+    // arrange
+    let mut linter = Linter::new();
+    let source = r#"
+from typedframes import BaseSchema, Column
+
+class UserSchema(BaseSchema):
+    user_id = Column(type=int)
+    email = Column(type=str)
+
+def main():
+    df: DataFrame[UserSchema] = load()
+    del df["email"]
+    print(df["email"])
+"#;
+    let dir = tempdir().unwrap();
+    let file_path = dir.path().join("test_del.py");
+    fs::write(&file_path, source).unwrap();
+
+    // act
+    let errors = linter.check_file_internal(source, &file_path).unwrap();
+
+    // assert — email was deleted; subsequent access is an error; the del itself is not
+    assert!(!errors.is_empty());
+    assert!(errors
+        .iter()
+        .any(|e| e.message.contains("Column 'email' does not exist")));
+    assert!(!errors.iter().any(|e| e.message.contains("del")));
+}
+
+#[test]
+fn test_should_error_on_del_nonexistent_column() {
+    // arrange
+    let mut linter = Linter::new();
+    let source = r#"
+from typedframes import BaseSchema, Column
+
+class UserSchema(BaseSchema):
+    user_id = Column(type=int)
+    email = Column(type=str)
+
+def main():
+    df: DataFrame[UserSchema] = load()
+    del df["nonexistent"]
+"#;
+    let dir = tempdir().unwrap();
+    let file_path = dir.path().join("test_del_bad.py");
+    fs::write(&file_path, source).unwrap();
+
+    // act
+    let errors = linter.check_file_internal(source, &file_path).unwrap();
+
+    // assert
+    assert!(!errors.is_empty());
+    assert!(errors.iter().any(|e| {
+        e.message.contains("Column 'nonexistent' does not exist") && e.message.contains("del")
+    }));
+}
+
+#[test]
+fn test_should_track_pop_method() {
+    // arrange
+    let mut linter = Linter::new();
+    let source = r#"
+from typedframes import BaseSchema, Column
+
+class UserSchema(BaseSchema):
+    user_id = Column(type=int)
+    email = Column(type=str)
+
+def main():
+    df: DataFrame[UserSchema] = load()
+    s = df.pop("email")
+    print(df["email"])
+"#;
+    let dir = tempdir().unwrap();
+    let file_path = dir.path().join("test_pop.py");
+    fs::write(&file_path, source).unwrap();
+
+    // act
+    let errors = linter.check_file_internal(source, &file_path).unwrap();
+
+    // assert — email was popped; subsequent access is an error
+    assert!(!errors.is_empty());
+    assert!(errors
+        .iter()
+        .any(|e| e.message.contains("Column 'email' does not exist")));
+}
+
+#[test]
+fn test_should_track_insert_method() {
+    // arrange
+    let mut linter = Linter::new();
+    let source = r#"
+from typedframes import BaseSchema, Column
+
+class UserSchema(BaseSchema):
+    user_id = Column(type=int)
+    email = Column(type=str)
+
+def main():
+    df: DataFrame[UserSchema] = load()
+    df.insert(0, "created_at", "2024-01-01")
+    print(df["created_at"])
+"#;
+    let dir = tempdir().unwrap();
+    let file_path = dir.path().join("test_insert.py");
+    fs::write(&file_path, source).unwrap();
+
+    // act
+    let errors = linter.check_file_internal(source, &file_path).unwrap();
+
+    // assert — created_at was inserted; access should be valid
+    assert!(errors.is_empty(), "unexpected errors: {:?}", errors);
+}

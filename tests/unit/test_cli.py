@@ -248,7 +248,7 @@ class TestCli(unittest.TestCase):
 
             # act
             with patch("sys.stdout", captured):
-                main(["check", str(py_file), "--no-index"])
+                main(["check", str(py_file), "--no-index", "--strict-ingest"])
 
             # assert
             output = captured.getvalue()
@@ -330,13 +330,15 @@ class TestCli(unittest.TestCase):
             "file": "mixed.py",
             "line": 2,
             "col": 0,
-            "message": "W001: columns unknown",
+            "code": "W002",
+            "message": "Dropped column 'x' does not exist in Schema",
             "severity": "warning",
         }
         actual_error = {
             "file": "mixed.py",
             "line": 7,
             "col": 0,
+            "code": "E001",
             "message": "Column 'wrong' not in Schema",
             "severity": "error",
         }
@@ -359,6 +361,61 @@ class TestCli(unittest.TestCase):
             self.assertNotIn("W001", output)
             self.assertIn("Column 'wrong'", output)
             self.assertIn("1 error", output)
+
+    def test_should_suppress_w001_by_default(self) -> None:
+        """Test that W001 ingestion warnings are suppressed by default."""
+        # arrange
+        w001 = {
+            "file": "f.py",
+            "line": 1,
+            "col": 0,
+            "code": "W001",
+            "message": "columns unknown at lint time",
+            "severity": "warning",
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            py_file = Path(tmpdir) / "f.py"
+            py_file.write_text("x = 1\n")
+            captured = StringIO()
+
+            # act
+            with (
+                patch("typedframes.cli._check_files", return_value=[w001]),
+                patch("sys.stdout", captured),
+            ):
+                main(["check", str(py_file)])
+
+            # assert
+            output = captured.getvalue()
+            self.assertNotIn("columns unknown at lint time", output)
+            self.assertIn("\u2713 Checked 1 file", output)
+
+    def test_should_show_w001_with_strict_ingest_flag(self) -> None:
+        """Test that --strict-ingest enables W001 ingestion warnings."""
+        # arrange
+        w001 = {
+            "file": "f.py",
+            "line": 1,
+            "col": 0,
+            "code": "W001",
+            "message": "columns unknown at lint time",
+            "severity": "warning",
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            py_file = Path(tmpdir) / "f.py"
+            py_file.write_text("x = 1\n")
+            captured = StringIO()
+
+            # act
+            with (
+                patch("typedframes.cli._check_files", return_value=[w001]),
+                patch("sys.stdout", captured),
+            ):
+                main(["check", str(py_file), "--strict-ingest"])
+
+            # assert
+            output = captured.getvalue()
+            self.assertIn("columns unknown at lint time", output)
 
     def test_should_not_crash_when_checker_not_installed_on_directory(self) -> None:
         """Test that a missing Rust extension when checking a directory exits with code 1."""

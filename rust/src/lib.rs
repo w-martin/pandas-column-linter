@@ -454,6 +454,7 @@ fn find_best_match<'a>(name: &str, candidates: &'a [String]) -> Option<&'a str> 
 pub struct LintError {
     pub line: usize,
     pub col: usize,
+    pub code: String,
     pub message: String,
     pub severity: String, // "error" or "warning"
 }
@@ -765,6 +766,63 @@ impl Linter {
         name
     }
 
+    /// Remove a column in-place from `recv`'s schema. Used for `del df['col']` and `df.pop('col')`.
+    fn remove_column_inplace(
+        &mut self,
+        recv: &str,
+        col_name: &str,
+        line: usize,
+        col: usize,
+        context: &str,
+        errors: &mut Vec<LintError>,
+    ) {
+        let base_info = self.variables.get(recv).map(|(s, l)| (s.clone(), *l));
+        let Some((schema_name, def_line)) = base_info else {
+            return;
+        };
+        let schema_display = if schema_name.starts_with("__inferred_") {
+            format!("inferred column set (defined at line {})", def_line)
+        } else {
+            format!("{} (defined at line {})", schema_name, def_line)
+        };
+        let Some(cols) = self.schemas.get(&schema_name).cloned() else {
+            return;
+        };
+        if !cols.contains(&col_name.to_string()) {
+            errors.push(LintError {
+                line,
+                col,
+                code: "E001".to_string(),
+                message: format!(
+                    "Column '{}' does not exist in {} ({})",
+                    col_name, schema_display, context
+                ),
+                severity: "error".to_string(),
+            });
+        } else {
+            let new_cols: Vec<String> = cols
+                .into_iter()
+                .filter(|c| c.as_str() != col_name)
+                .collect();
+            let new_schema = self.make_inferred_schema(new_cols, recv, line);
+            self.variables.insert(recv.to_string(), (new_schema, line));
+        }
+    }
+
+    /// Add a column in-place to `recv`'s schema. Used for `df.insert(loc, col, value)`.
+    fn add_column_inplace(&mut self, recv: &str, col_name: &str, line: usize) {
+        let base_info = self.variables.get(recv).map(|(s, l)| (s.clone(), *l));
+        let Some((schema_name, _)) = base_info else {
+            return;
+        };
+        let mut cols = self.schemas.get(&schema_name).cloned().unwrap_or_default();
+        if !cols.contains(&col_name.to_string()) {
+            cols.push(col_name.to_string());
+            let new_schema = self.make_inferred_schema(cols, recv, line);
+            self.variables.insert(recv.to_string(), (new_schema, line));
+        }
+    }
+
     fn visit_stmt(&mut self, stmt: &Stmt, errors: &mut Vec<LintError>) {
         match stmt {
             Stmt::ClassDef(class_def) => {
@@ -918,6 +976,7 @@ impl Linter {
                             errors.push(LintError {
                                 line,
                                 col,
+                                code: "E002".to_string(),
                                 message: format!(
                                     "Column name '{}' in {} conflicts with a pandas/polars method. This will shadow the method when accessed via attribute syntax (df.{}). Consider renaming to '{}_value' or similar.",
                                     col_name, class_def.name, col_name, col_name
@@ -958,6 +1017,7 @@ impl Linter {
                                             errors.push(LintError {
                                                 line: current_line,
                                                 col: current_col,
+                                                code: "E001".to_string(),
                                                 message: format!("Column '{}' does not exist in {} (mutation tracking)", col_name, schema_name),
                                                 severity: "error".to_string(),
                                             });
@@ -999,6 +1059,7 @@ impl Linter {
                                                 errors.push(LintError {
                                                     line: current_line,
                                                     col: current_col,
+                                                    code: "E001".to_string(),
                                                     message: format!(
                                                         "Column '{}' does not exist in {}",
                                                         col, schema_display
@@ -1184,6 +1245,7 @@ impl Linter {
                                                 errors.push(LintError {
                                                     line: current_line,
                                                     col: current_col,
+                                                    code: "W001".to_string(),
                                                     message: "columns unknown at lint time; \
                                                               specify `usecols`/`columns` or \
                                                               annotate: `df: PandasFrame[MySchema] \
@@ -1243,6 +1305,7 @@ impl Linter {
                                                         errors.push(LintError {
                                                             line: current_line,
                                                             col: current_col,
+                                                            code: "E001".to_string(),
                                                             message: format!(
                                                                 "Column '{}' does not exist in {}",
                                                                 col, schema_display
@@ -1319,6 +1382,7 @@ impl Linter {
                                                     errors.push(LintError {
                                                         line: current_line,
                                                         col: current_col,
+                                                        code: "W002".to_string(),
                                                         message: format!(
                                                             "Dropped column '{}' does not exist in {}",
                                                             col, schema_display
@@ -1384,6 +1448,33 @@ impl Linter {
                                     let mapping = Self::extract_rename_mapping(call);
                                     match (base_cols, mapping) {
                                         (Some(base_cols), Some(mapping)) => {
+                                            let schema_display = base_info
+                                                .as_ref()
+                                                .map(|(s, l)| {
+                                                    if s.starts_with("__inferred_") {
+                                                        format!(
+                                                            "inferred column set (defined at line {})",
+                                                            l
+                                                        )
+                                                    } else {
+                                                        format!("{} (defined at line {})", s, l)
+                                                    }
+                                                })
+                                                .unwrap_or_else(|| "unknown".to_string());
+                                            for old_col in mapping.keys() {
+                                                if !base_cols.contains(old_col) {
+                                                    errors.push(LintError {
+                                                        line: current_line,
+                                                        col: current_col,
+                                                        code: "E001".to_string(),
+                                                        message: format!(
+                                                            "Column '{}' does not exist in {} (rename)",
+                                                            old_col, schema_display
+                                                        ),
+                                                        severity: "error".to_string(),
+                                                    });
+                                                }
+                                            }
                                             let new_cols: Vec<String> = base_cols
                                                 .iter()
                                                 .map(|c| {
@@ -1473,6 +1564,43 @@ impl Linter {
                                         self.variables.insert(
                                             name.clone(),
                                             (schema_name.clone(), current_line),
+                                        );
+                                    }
+                                }
+                            } else if func_name == "pop" {
+                                // pop('col') removes a column in-place and returns a Series.
+                                // Mutate the receiver's schema; do not track the assignment target.
+                                if let Expr::Name(recv) = &*attr.value {
+                                    if let Some(col_name) = call
+                                        .arguments
+                                        .args
+                                        .first()
+                                        .and_then(|a| Self::extract_string_literal(a))
+                                    {
+                                        self.remove_column_inplace(
+                                            recv.id.as_str(),
+                                            col_name,
+                                            current_line,
+                                            current_col,
+                                            "pop",
+                                            errors,
+                                        );
+                                    }
+                                }
+                            } else if func_name == "insert" {
+                                // insert(loc, col, value) adds a column in-place; returns None.
+                                // Mutate the receiver's schema; do not track the assignment target.
+                                if let Expr::Name(recv) = &*attr.value {
+                                    if let Some(col_name) = call
+                                        .arguments
+                                        .args
+                                        .get(1)
+                                        .and_then(|a| Self::extract_string_literal(a))
+                                    {
+                                        self.add_column_inplace(
+                                            recv.id.as_str(),
+                                            col_name,
+                                            current_line,
                                         );
                                     }
                                 }
@@ -1717,7 +1845,63 @@ impl Linter {
                 }
             }
             Stmt::Expr(expr_stmt) => {
+                // Intercept in-place mutations before generic expression visiting.
+                if let Expr::Call(call) = &*expr_stmt.value {
+                    if let Expr::Attribute(attr) = &*call.func {
+                        let func_name = attr.attr.as_str();
+                        let (line, col) = self.source_location(call.range().start());
+                        if func_name == "pop" {
+                            if let Expr::Name(recv) = &*attr.value {
+                                if let Some(col_name) = call
+                                    .arguments
+                                    .args
+                                    .first()
+                                    .and_then(|a| Self::extract_string_literal(a))
+                                {
+                                    self.remove_column_inplace(
+                                        recv.id.as_str(),
+                                        col_name,
+                                        line,
+                                        col,
+                                        "pop",
+                                        errors,
+                                    );
+                                }
+                            }
+                        } else if func_name == "insert" {
+                            if let Expr::Name(recv) = &*attr.value {
+                                if let Some(col_name) = call
+                                    .arguments
+                                    .args
+                                    .get(1)
+                                    .and_then(|a| Self::extract_string_literal(a))
+                                {
+                                    self.add_column_inplace(recv.id.as_str(), col_name, line);
+                                }
+                            }
+                        }
+                    }
+                }
                 self.visit_expr(&expr_stmt.value, errors);
+            }
+            Stmt::Delete(delete) => {
+                for target in &delete.targets {
+                    if let Expr::Subscript(subscript) = target {
+                        if let Expr::Name(recv) = &*subscript.value {
+                            if let Some(col_name) = Self::extract_string_literal(&subscript.slice) {
+                                let (line, col) = self.source_location(subscript.range().start());
+                                self.remove_column_inplace(
+                                    recv.id.as_str(),
+                                    col_name,
+                                    line,
+                                    col,
+                                    "del",
+                                    errors,
+                                );
+                            }
+                        }
+                    }
+                }
             }
             _ => {}
         }
@@ -1807,6 +1991,7 @@ impl Linter {
                                 errors.push(LintError {
                                     line,
                                     col,
+                                    code: "E001".to_string(),
                                     message,
                                     severity: "error".to_string(),
                                 });
@@ -1849,6 +2034,7 @@ impl Linter {
                                     errors.push(LintError {
                                         line,
                                         col,
+                                        code: "E001".to_string(),
                                         message,
                                         severity: "error".to_string(),
                                     });
