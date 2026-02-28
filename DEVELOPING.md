@@ -71,7 +71,7 @@ Runs pytest with branch coverage. Coverage must be 100% or the build fails.
 ### Verify Licenses
 
 ```shell
-uv run inv verify-licences
+uv run licensecheck
 ```
 
 Runs licensecheck to verify all dependency licenses are compatible.
