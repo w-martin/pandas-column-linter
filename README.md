@@ -58,6 +58,8 @@ def process(df: PandasFrame[UserData]) -> None:
 **What you get:**
 
 - ✅ **Static analysis** - Catch column errors at lint-time with mypy or the standalone checker
+- ✅ **Works without schema annotations** - Column inference from `usecols=`, `dtype=`, and method chains catches errors on unannotated code
+- ✅ **Cross-file awareness** - Add `BaseSchema` and typed return annotations to follow schemas across module boundaries
 - ✅ **Beautiful runtime UX** - `df[Schema.column_group].mean()` (pandas) instead of ugly column lists
 - ✅ **Works with pandas AND polars** - Same schema API, explicit backend types
 - ✅ **Dynamic column matching** - Regex-based ColumnSets for time-series data
@@ -234,8 +236,10 @@ mypy src/
 
 ## Column Inference
 
-The standalone checker infers column sets directly from data loading calls and method chains, so you get
-column validation even on unannotated code.
+The standalone checker works without any `BaseSchema` classes.  It infers column sets directly from data
+loading calls and method chains, so you get column validation even on completely unannotated code.
+`BaseSchema` is a progressive enhancement: it adds cross-file awareness and IDE autocomplete, but the
+checker catches real bugs from day one without it.
 
 ### Inferred Schemas
 
@@ -325,8 +329,12 @@ typedframes check src/ --no-warnings
 
 ### See Also
 
-[`examples/inference_example.py`](examples/inference_example.py) — complete walkthrough of all four inference
-scenarios with annotated ✓/✗ comments.
+- [`examples/inference_example.py`](examples/inference_example.py) — single-file walkthrough of all four inference
+  scenarios with annotated ✓/✗ comments.
+- [`examples/multi_file_inference/`](examples/multi_file_inference/) — multi-file project checked with
+  `typedframes check examples/multi_file_inference/`; no `BaseSchema` anywhere.
+- [`examples/multi_file_with_schema/`](examples/multi_file_with_schema/) — same scenario with `BaseSchema`
+  classes; the checker follows schemas across module boundaries via the project index.
 
 ---
 
@@ -976,8 +984,18 @@ checker or mypy plugin.
 A: The mypy plugin doesn't work with pyright. Use the standalone checker (`typedframes check`) for column name
 validation. Schema descriptor access (`df[Schema.column]`) works natively in pyright without any plugin.
 
+**Q: Do I need to write `BaseSchema` classes to get value?**
+A: No. The standalone checker works entirely from inference: `usecols=`/`columns=`/`dtype=` arguments on read
+calls give it enough information to validate column access and propagate that knowledge through method chains
+(`rename`, `drop`, `assign`, `select`, …). `BaseSchema` is a progressive enhancement that unlocks cross-file
+awareness (schemas travel with function return types across module boundaries) and IDE autocomplete via
+descriptors — but the checker catches real column errors from day one without it. See
+[`examples/multi_file_inference/`](examples/multi_file_inference/) for a complete demo with no schema classes.
+
 **Q: Does this work with existing pandas/polars code?**
 A: Yes. You can gradually adopt typedframes by adding schemas to new code. Existing code continues to work.
+Start by adding `usecols=` to your read calls to get immediate column validation, then add `BaseSchema`
+classes incrementally where cross-file tracking or autocomplete is most valuable.
 
 **Q: What if my column name conflicts with a pandas/polars method?**
 A: No problem. Since column access uses bracket syntax with schema descriptors (`df[Schema.mean]`), there is no conflict

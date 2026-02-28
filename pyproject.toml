@@ -84,6 +84,10 @@ max-complexity = 10
 convention = "google"
 
 [dependency-groups]
+docs = [
+    "mkdocs-material>=9.5",
+    "mkdocstrings-python>=1.10",
+]
 dev = [
     "pandas>=3.0.0",
     "pandera>=0.29.0",
@@ -107,6 +111,7 @@ dev = [
     "xlsxwriter>=3.2.9",
     "fastexcel>=0.19.0",
     "pandas-stubs>=3.0.0.260204",
+    "mypy>=1.19.1",
 ]
 
 [tool.bandit]

@@ -1,0 +1,17 @@
+# Internal planning / research docs — not part of the public documentation site
+claude_media_posts/
+claude_output.txt
+errors.md
+gemini_feedback.md
+gemini_prd.md
+issue.md
+issue_original.md
+junie_feedback.txt
+media_posts.md
+phased_plan.md
+prd-aggressive-column-inference.md
+prd_cross_file_inference.md
+prd_pyright.md
+publish_errors.md
+towards_data_science.md
+ty_update_thread.md

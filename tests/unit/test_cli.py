@@ -22,11 +22,26 @@ class TestCli(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 2)
 
     def test_should_exit_2_for_nonexistent_path(self) -> None:
-        """Test that a nonexistent path exits with code 2."""
+        """Test that a nonexistent absolute path exits with code 2."""
         # arrange / act / assert
         with self.assertRaises(SystemExit) as ctx:
             main(["check", "/nonexistent/path/xyz"])
         self.assertEqual(ctx.exception.code, 2)
+
+    def test_should_show_resolved_path_for_nonexistent_relative_path(self) -> None:
+        """Test that a nonexistent relative path shows both the original and resolved form."""
+        # arrange
+        captured = StringIO()
+
+        # act / assert
+        with (
+            patch("sys.stderr", captured),
+            self.assertRaises(SystemExit) as ctx,
+        ):
+            main(["check", "no/such/dir"])
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertIn("'no/such/dir'", captured.getvalue())
+        self.assertIn("resolved to", captured.getvalue())
 
     def test_should_exit_1_when_checker_not_installed(self) -> None:
         """Test that a helpful error is shown when typedframes-checker is missing."""

@@ -1,0 +1,41 @@
+site_name: typedframes
+site_description: Static analysis for pandas and polars DataFrames.
+docs_dir: docs
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            show_root_heading: true
+            show_category_heading: true
+            merge_init_into_class: true
+
+nav:
+  - Home: index.md
+  - API Reference:
+    - Overview: api/index.md
+    - Core: api/core.md
+    - pandas: api/pandas.md
+    - polars: api/polars.md
+    - Schema Algebra: api/schema_algebra.md
+    - Pandera Integration: api/pandera.md
+    - Exceptions: api/exceptions.md
+    - CLI: api/cli.md

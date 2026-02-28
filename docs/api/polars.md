@@ -1,0 +1,3 @@
+# polars
+
+::: typedframes.polars.PolarsFrame

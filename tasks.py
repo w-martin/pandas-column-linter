@@ -77,6 +77,12 @@ def test(ctx: Context) -> None:
 
 
 @task
+def docs(ctx: Context) -> None:
+    """Serve the MkDocs documentation locally (requires docs dependency group)."""
+    ctx.run("mkdocs serve")
+
+
+@task
 def verify_licences(ctx: Context) -> None:
     """Run licensecheck to verify dependency licenses."""
     ctx.run("licensecheck")

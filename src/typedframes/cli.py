@@ -107,7 +107,11 @@ def _run_check(args: argparse.Namespace) -> None:
     path: Path = args.path.resolve()
 
     if not path.exists():
-        print(f"Error: path does not exist: {path}", file=sys.stderr)
+        original = args.path
+        if original.is_absolute():
+            print(f"Error: path does not exist: {path}", file=sys.stderr)
+        else:
+            print(f"Error: path does not exist: {original!r} (resolved to {path})", file=sys.stderr)
         sys.exit(2)
 
     index_bytes: bytes | None = None

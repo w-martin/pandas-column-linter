@@ -29,5 +29,5 @@ Thumbs.db
 coverage.json
 .complexipy_cache
 **/target
-docs
+site/
 .coverage*

@@ -1,0 +1,3 @@
+# pandas
+
+::: typedframes.pandas.PandasFrame
