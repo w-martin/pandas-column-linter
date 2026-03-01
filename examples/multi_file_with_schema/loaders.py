@@ -1,16 +1,10 @@
 """Data loaders that return typed frames.
 
-Return type annotations (``-> PandasFrame[OrderSchema]``) are the bridge
-between schema definitions and the cross-file index.  When the checker processes
-``pipeline.py`` and sees ``orders = load_orders(path)``, it looks up
-``load_orders`` in the project index, resolves its return schema to
-``OrderSchema``, and then validates every column access on ``orders`` against
-that schema — even though ``load_orders`` is defined in a different file.
-
-No ``usecols=`` is required here because the return type annotation already
-tells the checker which columns exist.  You still get a W001 warning on the
-bare ``pd.read_csv`` call (columns unknown at the read site), but column access
-on the *returned* typed frame in other files is fully validated.
+The return type annotations (``-> PandasFrame[OrderSchema]``) are what the
+checker indexes.  When ``pipeline.py`` calls ``load_orders(path)``, the checker
+looks up the function in the project index, resolves its return type to
+``OrderSchema``, and validates all downstream column access against that schema
+— without any ``usecols=`` or annotation in ``pipeline.py``.
 """
 
 from __future__ import annotations
@@ -27,19 +21,14 @@ if TYPE_CHECKING:
 
 
 def load_orders(path: str) -> PandasFrame[OrderSchema]:
-    """Load order records and assert the OrderSchema.
-
-    The return type annotation is what the checker indexes.  Call sites in
-    other files see this function as returning ``PandasFrame[OrderSchema]``
-    and get full column validation without needing to know what happens inside.
-    """
+    """Load order records and assert OrderSchema."""
     from typedframes.pandas import PandasFrame
 
-    raw = pd.read_csv(path)
+    raw = pd.read_csv(path, usecols=["order_id", "customer_id", "amount", "status"])
     return PandasFrame.from_schema(raw, OrderSchema)
 
 
 def load_customers(path: str) -> PolarsFrame[CustomerSchema]:
-    """Load customer records and assert the CustomerSchema."""
-    raw = pl.read_csv(path)
+    """Load customer records and assert CustomerSchema."""
+    raw = pl.read_csv(path, columns=["customer_id", "name", "region"])
     return cast("PolarsFrame[CustomerSchema]", raw)

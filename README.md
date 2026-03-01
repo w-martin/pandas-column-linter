@@ -2,7 +2,7 @@
 
 > ⚠️ **Project Status: Proof of Concept**
 >
-> `typedframes` (v0.1.2) is currently an experimental proof-of-concept. The core static analysis and mypy/Rust
+> `typedframes` (v0.2.0) is currently an experimental proof-of-concept. The core static analysis and mypy/Rust
 > integrations work, but expect rough edges. The codebase prioritizes demonstrating the viability of static DataFrame
 > schema validation over production-grade stability.
 >
@@ -35,13 +35,12 @@ def process(df: PandasFrame[UserData]) -> None:
 - [Why typedframes?](#why-typedframes)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
-- [Static Analysis](#static-analysis)
 - [Column Inference](#column-inference)
+- [Static Analysis](#static-analysis)
 - [Static Analysis Performance](#static-analysis-performance)
-- [Comparison](#comparison)
 - [Type Safety With Multiple Backends](#type-safety-with-multiple-backends)
-- [Features](#features)
 - [Advanced Usage](#advanced-usage)
+- [Comparison](#comparison)
 - [Pandera Integration](#pandera-integration)
 - [Examples](#examples)
 - [Philosophy](#philosophy)
@@ -57,9 +56,9 @@ def process(df: PandasFrame[UserData]) -> None:
 
 **What you get:**
 
-- ✅ **Static analysis** - Catch column errors at lint-time with mypy or the standalone checker
 - ✅ **Works without schema annotations** - Column inference from `usecols=`, `dtype=`, and method chains catches errors on unannotated code
 - ✅ **Cross-file awareness** - Add `BaseSchema` and typed return annotations to follow schemas across module boundaries
+- ✅ **Static analysis** - Catch column errors at lint-time with mypy or the standalone checker
 - ✅ **Beautiful runtime UX** - `df[Schema.column_group].mean()` (pandas) instead of ugly column lists
 - ✅ **Works with pandas AND polars** - Same schema API, explicit backend types
 - ✅ **Dynamic column matching** - Regex-based ColumnSets for time-series data
@@ -84,7 +83,33 @@ The Rust-based checker is included — no separate install needed.
 
 ## Quick Start
 
+### Run on existing code
+
+The checker works from day one without any schema classes. Pass `usecols=` / `columns=` to your read calls and
+column access is validated automatically — no schema classes needed:
+
+```python
+import pandas as pd
+
+# Checker infers {order_id, amount, status} from usecols=
+orders = pd.read_csv("orders.csv", usecols=["order_id", "amount", "status"])
+print(orders["amount"])   # ✓ OK
+print(orders["revenue"])  # ✗ E001 — 'revenue' not in inferred set
+```
+
+```shell
+typedframes check src/
+# ✓ Checked 12 files in 0.0s
+# ✗ src/pipeline.py:7 - Column 'revenue' not in inferred set {order_id, amount, status}
+```
+
+See [`examples/multi_file_inference/`](examples/multi_file_inference/) for a multi-file example with no `BaseSchema`
+classes at all.
+
 ### Define Your Schema (Once)
+
+Add `BaseSchema` classes when you want cross-file awareness and IDE autocomplete. Schemas travel with function return
+types across module boundaries — the checker validates call sites even in files that have no `usecols=` of their own:
 
 ```python
 from typedframes import BaseSchema, Column, ColumnSet
@@ -148,89 +173,6 @@ def analyze_polars(data: PolarsFrame[SalesData]) -> pl.DataFrame:
 filtered = df.filter(SalesData.revenue.col > 1000)
 grouped = df.group_by('customer_id').agg(SalesData.revenue.col.sum())
 ```
-
----
-
-## Static Analysis
-
-typedframes provides **two ways** to check your code:
-
-### Option 1: Standalone Checker (Fast)
-
-```shell
-# Blazing fast Rust-based checker
-typedframes check src/
-
-# Output:
-# ✓ Checked 47 files in 0.0s
-# ✗ src/analysis.py:23 - Column 'profit' not in SalesData
-# ✗ src/pipeline.py:56 - Column 'user_name' not in UserData
-```
-
-**Features:**
-- Catches column name errors
-- Validates schema mismatches between functions
-- Checks both pandas and polars code
-- 10-100x faster than mypy
-
-**Use this for:**
-- Fast feedback during development
-- CI/CD pipelines
-- Pre-commit hooks
-
-**Configuration:**
-```shell
-# Check specific files
-typedframes check src/pipeline.py
-
-# Check directory (builds cross-file index automatically)
-typedframes check src/
-
-# Fail on any error (for CI)
-typedframes check src/ --strict
-
-# JSON output
-typedframes check src/ --json
-
-# Skip cross-file index (single-file mode, faster for quick checks)
-typedframes check src/ --no-index
-
-# Suppress all W001/W002 warnings
-typedframes check src/ --no-warnings
-```
-
-To suppress warnings project-wide, add to `pyproject.toml`:
-```toml
-[tool.typedframes]
-enabled = true
-warnings = false
-```
-
-### Option 2: Mypy Plugin (Comprehensive)
-
-```shell
-# Add to pyproject.toml
-[tool.mypy]
-plugins = ["typedframes.mypy"]
-
-# Or mypy.ini
-[mypy]
-plugins = typedframes.mypy
-
-# Run mypy
-mypy src/
-```
-
-**Features:**
-- Full type checking across your codebase
-- Catches column errors AND regular type errors
-- IDE integration (VSCode, PyCharm)
-- Works with existing mypy configuration
-
-**Use this for:**
-- Comprehensive type checking
-- Integration with existing mypy setup
-- IDE error highlighting
 
 ---
 
@@ -338,6 +280,89 @@ typedframes check src/ --no-warnings
 
 ---
 
+## Static Analysis
+
+typedframes provides **two ways** to check your code:
+
+### Option 1: Standalone Checker (Fast)
+
+```shell
+# Blazing fast Rust-based checker
+typedframes check src/
+
+# Output:
+# ✓ Checked 47 files in 0.0s
+# ✗ src/analysis.py:23 - Column 'profit' not in SalesData
+# ✗ src/pipeline.py:56 - Column 'user_name' not in UserData
+```
+
+**Features:**
+- Catches column name errors
+- Validates schema mismatches between functions
+- Checks both pandas and polars code
+- 10-100x faster than mypy
+
+**Use this for:**
+- Fast feedback during development
+- CI/CD pipelines
+- Pre-commit hooks
+
+**Configuration:**
+```shell
+# Check specific files
+typedframes check src/pipeline.py
+
+# Check directory (builds cross-file index automatically)
+typedframes check src/
+
+# Fail on any error (for CI)
+typedframes check src/ --strict
+
+# JSON output
+typedframes check src/ --json
+
+# Skip cross-file index (single-file mode, faster for quick checks)
+typedframes check src/ --no-index
+
+# Suppress all W001/W002 warnings
+typedframes check src/ --no-warnings
+```
+
+To suppress warnings project-wide, add to `pyproject.toml`:
+```toml
+[tool.typedframes]
+enabled = true
+warnings = false
+```
+
+### Option 2: Mypy Plugin (Comprehensive)
+
+```shell
+# Add to pyproject.toml
+[tool.mypy]
+plugins = ["typedframes.mypy"]
+
+# Or mypy.ini
+[mypy]
+plugins = typedframes.mypy
+
+# Run mypy
+mypy src/
+```
+
+**Features:**
+- Full type checking across your codebase
+- Catches column errors AND regular type errors
+- IDE integration (VSCode, PyCharm)
+- Works with existing mypy configuration
+
+**Use this for:**
+- Comprehensive type checking
+- Integration with existing mypy setup
+- IDE error highlighting
+
+---
+
 ## Static Analysis Performance
 
 Fast feedback reduces development time. The typedframes Rust binary provides near-instant column checking.
@@ -346,7 +371,7 @@ Fast feedback reduces development time. The typedframes Rust binary provides nea
 
 | Tool               | Version | What it does                  | typedframes (11 files) | great_expectations (490 files) |
 |--------------------|---------|-------------------------------|------------------------|--------------------------------|
-| typedframes        | 0.1.2   | DataFrame column checker      | 961µs ±56µs            | 930µs ±89µs                    |
+| typedframes        | 0.2.0   | DataFrame column checker      | 961µs ±56µs            | 930µs ±89µs                    |
 | ruff               | 0.15.0  | Linter (no type checking)     | 39ms ±12ms             | 360ms ±18ms                    |
 | ty                 | 0.0.16  | Type checker                  | 146ms ±13ms            | 1.65s ±26ms                    |
 | pyrefly            | 0.52.0  | Type checker                  | 152ms ±7ms             | 693ms ±33ms                    |
@@ -369,6 +394,198 @@ parsing.
 
 ---
 
+## Type Safety With Multiple Backends
+
+typedframes uses **explicit backend types** to ensure complete type safety:
+
+```python
+from typedframes import BaseSchema, Column
+from typedframes.pandas import PandasFrame
+from typedframes.polars import PolarsFrame
+
+
+class UserData(BaseSchema):
+    user_id = Column(type=int)
+    email = Column(type=str)
+
+
+# Pandas pipeline - type checker knows pandas methods
+def pandas_analyze(df: PandasFrame[UserData]) -> PandasFrame[UserData]:
+  return df[df[UserData.user_id] > 100]  # ✓ Pandas syntax
+
+
+# Polars pipeline - type checker knows polars methods
+def polars_analyze(df: PolarsFrame[UserData]) -> PolarsFrame[UserData]:
+  return df.filter(UserData.user_id.col > 100)  # ✓ Polars syntax
+
+
+# Type checker prevents mixing backends
+df_pandas = PandasFrame.read_csv("data.csv", UserData)
+df_polars = PolarsFrame.read_csv("data.csv", UserData)
+
+pandas_analyze(df_pandas)  # ✓ OK
+polars_analyze(df_polars)  # ✓ OK
+pandas_analyze(df_polars)  # ✗ Type error: Expected PandasFrame, got PolarsFrame
+```
+
+---
+
+## Advanced Usage
+
+### Merges, Joins, and Filters
+
+Schema-typed DataFrames preserve their type through common operations:
+
+**Pandas:**
+
+```python
+from typedframes import BaseSchema, Column
+from typedframes.pandas import PandasFrame
+import pandas as pd
+
+
+class UserSchema(BaseSchema):
+    user_id = Column(type=int)
+    email = Column(type=str)
+
+
+class OrderSchema(BaseSchema):
+    order_id = Column(type=int)
+    user_id = Column(type=int)
+    total = Column(type=float)
+
+
+# Schema preserved through filtering
+def get_active_users(df: PandasFrame[UserSchema]) -> PandasFrame[UserSchema]:
+  return df[df[UserSchema.user_id] > 100]  # ✓ Still PandasFrame[UserSchema]
+
+
+# Schema preserved through merges
+users: PandasFrame[UserSchema] = ...
+orders: PandasFrame[OrderSchema] = ...
+merged = users.merge(orders, on=str(UserSchema.user_id))
+```
+
+**Polars:**
+```python
+from typedframes.polars import PolarsFrame
+import polars as pl
+
+
+# Schema columns work in filter expressions
+def filter_users(df: PolarsFrame[UserSchema]) -> pl.DataFrame:
+    return df.filter(UserSchema.user_id.col > 100)
+
+
+# Schema columns work in join expressions
+def join_data(
+    users: PolarsFrame[UserSchema],
+    orders: PolarsFrame[OrderSchema]
+) -> pl.DataFrame:
+    return users.join(
+        orders,
+        left_on=UserSchema.user_id.col,
+        right_on=OrderSchema.user_id.col
+    )
+
+
+# Schema columns work in select expressions
+def select_columns(df: PolarsFrame[UserSchema]) -> pl.DataFrame:
+    return df.select([UserSchema.user_id.col, UserSchema.email.col])
+```
+
+### Dynamic Column Matching
+
+Perfect for time-series data where column counts change. Regex ColumnSets match actual DataFrame columns at
+`from_schema()` time — the matched columns are stored and used when you access `df[Schema.sensors]`. Static analysis
+validates that the ColumnSet *name* exists in the schema, but cannot verify which columns the regex will match at
+runtime.
+
+```python
+from typedframes import BaseSchema, Column, ColumnSet, ColumnGroup
+from typedframes.pandas import PandasFrame
+
+
+class SensorReadings(BaseSchema):
+    timestamp = Column(type=str)
+    # Matches: sensor_1, sensor_2, ..., sensor_N
+    sensors = ColumnSet(type=float, members=r"sensor_\d+", regex=True)
+
+
+# Works regardless of how many sensor columns exist
+df = PandasFrame.read_csv("readings_2024_01.csv", SensorReadings)  # 50 sensors
+df[SensorReadings.sensors].mean()  # All sensor columns
+
+df = PandasFrame.read_csv("readings_2024_02.csv", SensorReadings)  # 75 sensors
+df[SensorReadings.sensors].mean()  # All sensor columns (different count, same code)
+```
+
+For logical grouping across multiple ColumnSets:
+
+```python
+class TimeSeriesData(BaseSchema):
+    timestamp = Column(type=str)
+    temperature = ColumnSet(type=float, members=r"temp_sensor_\d+", regex=True)
+    pressure = ColumnSet(type=float, members=r"pressure_\d+", regex=True)
+
+    # Access all sensor columns together
+    sensors = ColumnGroup(members=[temperature, pressure])
+
+
+df = PandasFrame.read_csv("sensors.csv", TimeSeriesData)
+avg_temp = df[TimeSeriesData.temperature].mean()
+all_readings = df[TimeSeriesData.sensors].describe()
+```
+
+### Schema Composition
+
+Compose upward — build bigger schemas from smaller ones via inheritance. Type checkers see all columns natively.
+
+```python
+from typedframes import BaseSchema, Column
+from typedframes.pandas import PandasFrame
+
+
+# Start with the smallest useful schema
+class UserPublic(BaseSchema):
+    user_id = Column(type=int)
+    email = Column(type=str)
+    name = Column(type=str)
+
+
+# Extend it — never strip down
+class UserFull(UserPublic):
+    password_hash = Column(type=str)
+
+
+class Orders(BaseSchema):
+    order_id = Column(type=int)
+    user_id = Column(type=int)
+    total = Column(type=float)
+
+
+# Combine via multiple inheritance
+class UserOrders(UserPublic, Orders):
+  """Type checkers see all columns from both parents."""
+  ...
+
+
+# Or use the + operator
+UserOrdersDynamic = UserPublic + Orders
+
+users: PandasFrame[UserPublic] = ...
+orders: PandasFrame[Orders] = ...
+merged: PandasFrame[UserOrders] = PandasFrame.from_schema(
+  users.merge(orders, on=str(UserPublic.user_id)), UserOrders
+)
+```
+
+Overlapping columns with the same type are allowed (common after merges). Conflicting types raise `SchemaConflictError`.
+
+See [`examples/schema_algebra_example.py`](examples/schema_algebra_example.py) for a complete walkthrough.
+
+---
+
 ## Comparison
 
 ### Feature Matrix (Static Analysis Focus)
@@ -378,7 +595,7 @@ Comprehensive comparison of pandas/DataFrame typing and validation tools. **type
 
 | Feature                         | typedframes            | Pandera     | Great Expectations | strictly_typed_pandas | pandas-stubs | dataenforce | pandas-type-checks | StaticFrame      | narwhals |
 |---------------------------------|------------------------|-------------|--------------------|-----------------------|--------------|-------------|--------------------|------------------|----------|
-| **Version tested**              | 0.1.2                  | 0.29.0      | 1.4.3              | 0.3.6                 | 3.0.0        | 0.1.2       | 1.1.3              | 3.7.0            | 2.16.0   |
+| **Version tested**              | 0.2.0                  | 0.29.0      | 1.4.3              | 0.3.6                 | 3.0.0        | 0.1.2       | 1.1.3              | 3.7.0            | 2.16.0   |
 | **Analysis Type**               |
 | When errors are caught          | **Static (lint-time)** | Runtime     | Runtime            | Static + Runtime      | Static       | Runtime     | Runtime            | Static + Runtime | Runtime  |
 | **Static Analysis (our focus)** |
@@ -470,232 +687,6 @@ These tools serve different purposes:
 | Data quality monitoring / pipeline validation        | Great Expectations                  |
 | Immutable DataFrames from scratch                    | StaticFrame                         |
 | Pandas API type hints only                           | pandas-stubs                        |
-
----
-
-## Type Safety With Multiple Backends
-
-typedframes uses **explicit backend types** to ensure complete type safety:
-
-```python
-from typedframes import BaseSchema, Column
-from typedframes.pandas import PandasFrame
-from typedframes.polars import PolarsFrame
-
-
-class UserData(BaseSchema):
-    user_id = Column(type=int)
-    email = Column(type=str)
-
-
-# Pandas pipeline - type checker knows pandas methods
-def pandas_analyze(df: PandasFrame[UserData]) -> PandasFrame[UserData]:
-  return df[df[UserData.user_id] > 100]  # ✓ Pandas syntax
-
-
-# Polars pipeline - type checker knows polars methods
-def polars_analyze(df: PolarsFrame[UserData]) -> PolarsFrame[UserData]:
-  return df.filter(UserData.user_id.col > 100)  # ✓ Polars syntax
-
-
-# Type checker prevents mixing backends
-df_pandas = PandasFrame.read_csv("data.csv", UserData)
-df_polars = PolarsFrame.read_csv("data.csv", UserData)
-
-pandas_analyze(df_pandas)  # ✓ OK
-polars_analyze(df_polars)  # ✓ OK
-pandas_analyze(df_polars)  # ✗ Type error: Expected PandasFrame, got PolarsFrame
-```
-
----
-
-## Features
-
-### Clean Schema Definition
-
-```python
-from typedframes import BaseSchema, Column, ColumnSet, ColumnGroup
-
-
-class TimeSeriesData(BaseSchema):
-    timestamp = Column(type=str)
-    temperature = ColumnSet(type=float, members=r"temp_sensor_\d+", regex=True)
-    pressure = ColumnSet(type=float, members=r"pressure_\d+", regex=True)
-
-    # Logical grouping
-    sensors = ColumnGroup(members=[temperature, pressure])
-```
-
-### Beautiful Runtime API
-
-```python
-from typedframes.pandas import PandasFrame
-
-df = PandasFrame.read_csv("sensors.csv", TimeSeriesData)
-
-# Access column groups as DataFrames
-temps = df[TimeSeriesData.temperature]  # All temp_sensor_* columns
-all_sensors = df[TimeSeriesData.sensors]  # All sensor columns
-
-# Clean operations
-avg_temp = df[TimeSeriesData.temperature].mean()
-max_pressure = df[TimeSeriesData.pressure].max()
-
-# Standard pandas access still works
-df['timestamp']  # Single column
-df[['timestamp', 'temp_sensor_1']]  # Multi-column select
-```
-
-### Column-Level Static Checking
-
-```python
-from typedframes.pandas import PandasFrame
-
-
-def daily_summary(data: PandasFrame[TimeSeriesData]) -> PandasFrame[DailySummary]:
-    # Type checker validates column access
-    data['timestamp']  # ✓ OK - column exists
-    data['date']  # ✗ Error: Column 'date' not in TimeSeriesData
-
-    # Type checker validates ColumnSet access
-    temps = data[TimeSeriesData.temperature]  # ✓ OK - ColumnSet exists
-    summary = temps.mean()
-    return summary
-```
-
-### Dynamic Column Matching
-
-Perfect for time-series data where column counts change. Regex ColumnSets match actual DataFrame columns at
-`from_schema()` time — the matched columns are stored and used when you access `df[Schema.sensors]`. Static analysis
-validates that the ColumnSet *name* exists in the schema, but cannot verify which columns the regex will match at
-runtime.
-
-```python
-class SensorReadings(BaseSchema):
-    timestamp = Column(type=str)
-    # Matches: sensor_1, sensor_2, ..., sensor_N
-    sensors = ColumnSet(type=float, members=r"sensor_\d+", regex=True)
-
-# Works regardless of how many sensor columns exist
-df = PandasFrame.read_csv("readings_2024_01.csv", SensorReadings)  # 50 sensors
-df[SensorReadings.sensors].mean()  # All sensor columns
-
-df = PandasFrame.read_csv("readings_2024_02.csv", SensorReadings)  # 75 sensors
-df[SensorReadings.sensors].mean()  # All sensor columns (different count, same code)
-```
-
----
-
-## Advanced Usage
-
-### Merges, Joins, and Filters
-
-Schema-typed DataFrames preserve their type through common operations:
-
-**Pandas:**
-
-```python
-from typedframes import BaseSchema, Column
-from typedframes.pandas import PandasFrame
-import pandas as pd
-
-
-class UserSchema(BaseSchema):
-    user_id = Column(type=int)
-    email = Column(type=str)
-
-
-class OrderSchema(BaseSchema):
-    order_id = Column(type=int)
-    user_id = Column(type=int)
-    total = Column(type=float)
-
-
-# Schema preserved through filtering
-def get_active_users(df: PandasFrame[UserSchema]) -> PandasFrame[UserSchema]:
-  return df[df[UserSchema.user_id] > 100]  # ✓ Still PandasFrame[UserSchema]
-
-
-# Schema preserved through merges
-users: PandasFrame[UserSchema] = ...
-orders: PandasFrame[OrderSchema] = ...
-merged = users.merge(orders, on=str(UserSchema.user_id))
-```
-
-**Polars:**
-```python
-from typedframes.polars import PolarsFrame
-import polars as pl
-
-
-# Schema columns work in filter expressions
-def filter_users(df: PolarsFrame[UserSchema]) -> pl.DataFrame:
-    return df.filter(UserSchema.user_id.col > 100)
-
-
-# Schema columns work in join expressions
-def join_data(
-    users: PolarsFrame[UserSchema],
-    orders: PolarsFrame[OrderSchema]
-) -> pl.DataFrame:
-    return users.join(
-        orders,
-        left_on=UserSchema.user_id.col,
-        right_on=OrderSchema.user_id.col
-    )
-
-
-# Schema columns work in select expressions
-def select_columns(df: PolarsFrame[UserSchema]) -> pl.DataFrame:
-    return df.select([UserSchema.user_id.col, UserSchema.email.col])
-```
-
-### Schema Composition
-
-Compose upward — build bigger schemas from smaller ones via inheritance. Type checkers see all columns natively.
-
-```python
-from typedframes import BaseSchema, Column
-from typedframes.pandas import PandasFrame
-
-
-# Start with the smallest useful schema
-class UserPublic(BaseSchema):
-    user_id = Column(type=int)
-    email = Column(type=str)
-    name = Column(type=str)
-
-
-# Extend it — never strip down
-class UserFull(UserPublic):
-    password_hash = Column(type=str)
-
-
-class Orders(BaseSchema):
-    order_id = Column(type=int)
-    user_id = Column(type=int)
-    total = Column(type=float)
-
-
-# Combine via multiple inheritance
-class UserOrders(UserPublic, Orders):
-  """Type checkers see all columns from both parents."""
-  ...
-
-
-# Or use the + operator
-UserOrdersDynamic = UserPublic + Orders
-
-users: PandasFrame[UserPublic] = ...
-orders: PandasFrame[Orders] = ...
-merged: PandasFrame[UserOrders] = PandasFrame.from_schema(
-  users.merge(orders, on=str(UserPublic.user_id)), UserOrders
-)
-```
-
-Overlapping columns with the same type are allowed (common after merges). Conflicting types raise `SchemaConflictError`.
-
-See [`examples/schema_algebra_example.py`](examples/schema_algebra_example.py) for a complete walkthrough.
 
 ---
 

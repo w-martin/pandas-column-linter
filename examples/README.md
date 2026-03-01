@@ -2,46 +2,34 @@
 
 ## multi_file_inference/
 
-Demonstrates aggressive column inference across multiple files **without any
-`BaseSchema` classes**.  The checker infers column sets from `usecols=` /
-`columns=` / `dtype=` arguments and propagates them through method chains
-(rename, drop, assign, select, filter).
+The checker works from day one with no schema classes.  `loaders.py` and
+`transforms.py` use `usecols=` / `columns=` / `dtype=` to give the checker
+column information; method chains (rename, drop, assign, select) propagate that
+information forward.  Two intentional bugs are caught as E001 errors.
 
-The directory contains two intentional errors — a wrong column name after
-`usecols=` and an access on a column that was dropped earlier in the chain.
-Both are invisible to mypy and ty because `df["any_string"]` is a valid
-subscript on `pd.DataFrame` / `pl.DataFrame` from their perspective.
+`pipeline.py` shows the ceiling of inference alone: `load_orders` returns plain
+`pd.DataFrame`, so the checker has nothing to validate against at the call site
+— a wrong column name passes silently.
 
-```shell
-uv run mypy --config-file mypy_empty.ini multi_file_inference/
-```
-```shell
-uv run ty check multi_file_inference/
-```
 ```shell
 uv run typedframes check multi_file_inference/
 ```
 
 ## multi_file_with_schema/
 
-Same multi-file scenario, but `BaseSchema` classes carry the column set across
-module boundaries.  Functions annotated `-> PandasFrame[Schema]` are indexed by
-the checker; call sites in other files are validated against that schema without
-needing `usecols=` or local annotations.
+The same three-file layout, but `schemas.py` defines `BaseSchema` classes and
+`loaders.py` annotates its return types as `PandasFrame[OrderSchema]`.  The
+checker builds a project index and resolves those annotations at every call
+site.
 
-The directory contains two intentional errors in `pipeline.py` that access
-columns absent from `OrderSchema`.  The schema is defined in `schemas.py` and
-the returning function in `loaders.py` — the errors are only detectable by
-tracing across all three files.  mypy and ty accept the calls because
-`PandasFrame.__getitem__` takes a `str` and returns `Any`.
+**One error, three files.**  The single bug — `orders["revenue"]` in
+`pipeline.py` — requires tracing from `pipeline.py` → `loaders.py` →
+`schemas.py` to detect.  mypy and ty accept the call silently.  The inference
+example reported two errors across two files and was blind to this one.
 
-```shell
-uv run mypy --config-file mypy_empty.ini multi_file_with_schema/
-```
-
-```shell
-uv run ty check multi_file_with_schema/
-```
+This is the payoff of investing in schemas as a codebase matures: the checker
+has complete information, emits no spurious warnings, and catches bugs that
+span module boundaries.
 
 ```shell
 uv run typedframes check multi_file_with_schema/
@@ -49,84 +37,67 @@ uv run typedframes check multi_file_with_schema/
 
 ## inference_example.py
 
+Single-file walkthrough of all inference modes: full schema annotation,
+`usecols=` inference, bare load (W001 warning), and method-chain propagation
+through rename / drop / assign / filter.
+
 ```shell
 uv run mypy --config-file mypy_empty.ini --strict inference_example.py
-```
-
-```shell
 uv run ty check inference_example.py
-```
-
-```shell
 uv run typedframes check inference_example.py
 ```
 
 ## pandasframe_example.py
 
+`PandasFrame[Schema]` basics: `from_schema`, descriptor access, column
+filtering, and intentional errors to show what the checker catches.
+
 ```shell
 uv run mypy --config-file mypy_empty.ini --strict pandasframe_example.py
-```
-
-```shell
 uv run ty check pandasframe_example.py
-```
-
-```shell
 uv run typedframes check pandasframe_example.py
-```
-
-## pandera_example.py
-
-```shell
-uv run mypy --config-file mypy_empty.ini --strict pandera_example.py
-```
-
-```shell
-uv run ty check pandera_example.py
-```
-
-```shell
-uv run typedframes check pandera_example.py
 ```
 
 ## polarsframe_example.py
 
+`PolarsFrame[Schema]` with polars expressions (`Schema.col`), select, and
+filter.
+
 ```shell
 uv run mypy --config-file mypy_empty.ini --strict polarsframe_example.py
-```
-
-```shell
 uv run ty check polarsframe_example.py
-```
-
-```shell
 uv run typedframes check polarsframe_example.py
 ```
 
 ## schema_algebra_example.py
 
+Schema composition via inheritance and the `+` operator.  Shows how to build
+merged schemas for joined DataFrames without re-listing columns.
+
 ```shell
 uv run mypy --config-file mypy_empty.ini --strict schema_algebra_example.py
-```
-
-```shell
 uv run ty check schema_algebra_example.py
+uv run typedframes check schema_algebra_example.py
 ```
 
+## pandera_example.py
+
+Converts a `BaseSchema` to a Pandera schema with `to_pandera_schema()` for
+runtime validation.  Use alongside the standalone checker: typedframes catches
+column errors at lint time, Pandera validates actual data at runtime.
+
 ```shell
-uv run typedframes check schema_algebra_example.py
+uv run mypy --config-file mypy_empty.ini --strict pandera_example.py
+uv run ty check pandera_example.py
+uv run typedframes check pandera_example.py
 ```
 
 ## typedframes_example.py
 
+Quick-start showing pandas and polars side-by-side with a shared schema.
+
 ```shell
 uv run mypy --config-file mypy_empty.ini --strict typedframes_example.py
-```
-
-```shell
 uv run ty check typedframes_example.py
-```
-
-```shell
 uv run typedframes check typedframes_example.py
 ```

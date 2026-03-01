@@ -81,14 +81,11 @@ def polars_summary(customers_path: str) -> None:
 
 
 def wrong_column_cross_file(path: str) -> None:
-    """Accesses columns absent from OrderSchema — only catchable with the project index.
+    """Accesses a column absent from OrderSchema — caught via the project index.
 
-    ``load_orders`` is defined in ``loaders.py`` and returns
-    ``PandasFrame[OrderSchema]``; ``OrderSchema`` is defined in ``schemas.py``.
-    mypy and ty accept ``orders["revenue"]`` because ``PandasFrame.__getitem__``
-    takes a ``str`` and returns ``Any``.  typedframes resolves the import chain
-    and reports E001 for each missing column.
+    ``load_orders`` is in ``loaders.py``, ``OrderSchema`` is in ``schemas.py``.
+    The checker traces all three files and reports E001.  mypy and ty accept the
+    call because ``PandasFrame.__getitem__`` takes ``str`` and returns ``Any``.
     """
     orders = load_orders(path)
     print(orders["revenue"])  # ✗ E001 — 'revenue' not in OrderSchema
-    print(orders["date"])  # ✗ E001 — 'date' not in OrderSchema

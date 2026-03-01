@@ -44,7 +44,7 @@ Usage:
     df: PolarsFrame[UserSchema] = pl.read_csv("users.csv")
 """
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 
 from .base_schema import BaseSchema as BaseSchema
 from .column import Column as Column
