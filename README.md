@@ -22,7 +22,7 @@ class UserData(BaseSchema):
 
 df: Annotated[pd.DataFrame, UserData] = pd.read_csv("users.csv")
 df['user_id']    # ✓ Validated by checker
-df['username']   # ✗ E001: Column 'username' not in UserData
+df['username']   # ✗ unknown-column: Column 'username' not in UserData
 ```
 
 **Descriptors as a bridge:** define once in `Column(type=int)`, access as `df[UserData.user_id.s]` (pandas string
@@ -95,12 +95,12 @@ import pandas as pd
 # Checker infers {order_id, amount, status} from usecols=
 orders = pd.read_csv("orders.csv", usecols=["order_id", "amount", "status"])
 print(orders["amount"])   # ✓ OK
-print(orders["revenue"])  # ✗ E001 — 'revenue' not in inferred set
+print(orders["revenue"])  # ✗ unknown-column — 'revenue' not in inferred set
 ```
 
 ```shell
 typedframes check src/
-# src/pipeline.py:7:8: error[E001] Column 'revenue' not in inferred set {order_id, amount, status}
+# src/pipeline.py:7:8: error[unknown-column] Column 'revenue' not in inferred set {order_id, amount, status}
 # ✗ Found 1 error in 12 files (0.0s)
 ```
 
@@ -136,7 +136,7 @@ df: Annotated[pd.DataFrame, SalesData] = pd.read_csv("sales.csv")
 
 # String access — validated by the standalone checker
 print(df['revenue'].sum())
-print(df['profit'])  # ✗ E001: Column 'profit' not in SalesData
+print(df['profit'])  # ✗ unknown-column: Column 'profit' not in SalesData
 
 # .s gives a refactor-safe string name from the descriptor
 print(df[SalesData.revenue.s].sum())   # same as df['revenue'].sum()
@@ -145,7 +145,7 @@ print(df[SalesData.revenue.s].sum())   # same as df['revenue'].sum()
 # Type-safe function signature
 def analyze(data: Annotated[pd.DataFrame, SalesData]) -> float:
     data['revenue']  # ✓ Validated by checker
-    data['profit']   # ✗ E001 at lint-time: 'profit' not in SalesData
+    data['profit']   # ✗ unknown-column: 'profit' not in SalesData
     return data[SalesData.revenue.s].mean()
 ```
 
@@ -160,7 +160,7 @@ df: Annotated[pl.DataFrame, SalesData] = pl.read_csv("sales.csv")
 
 # pl.col() references are now validated by the standalone checker
 print(df.filter(pl.col('revenue') > 1000))
-print(df.select(pl.col('profit')))  # ✗ E001: Column 'profit' not in SalesData
+print(df.select(pl.col('profit')))  # ✗ unknown-column: Column 'profit' not in SalesData
 
 # .col gives a refactor-safe polars expression from the descriptor
 filtered = df.filter(SalesData.revenue.col > 1000)
@@ -215,13 +215,13 @@ print(augmented["created_at"])  # ✓ OK
 
 ### Inference Gaps and Warnings
 
-**W001 — unannotated data ingestion (off by default)**
+**untracked-dataframe — unannotated data ingestion (off by default)**
 
 By default, typedframes supports permissive Exploratory Data Analysis (EDA). When a DataFrame is loaded
 via `pd.read_csv()` without `usecols=` or a schema annotation, the checker assumes an *Unknown* state
 and bypasses strict column validation to avoid nagging you during discovery.
 
-To lock down production CI/CD pipelines, opt in to W001 with `--strict-ingest`:
+To lock down production CI/CD pipelines, opt in to `untracked-dataframe` warnings with `--strict-ingest`:
 
 ```shell
 typedframes check src/ --strict-ingest
@@ -231,7 +231,7 @@ With strict ingestion enabled, loading a DataFrame without a schema or `usecols=
 
 ```python
 df = pd.read_csv("users.csv")
-# ⚠ W001: columns unknown at lint time; specify `usecols`/`columns` or
+# ⚠ untracked-dataframe: columns unknown at lint time; specify `usecols`/`columns` or
 #   annotate: `df: Annotated[pd.DataFrame, MySchema] = pd.read_csv(...)`
 ```
 
@@ -246,7 +246,7 @@ Fix option 2 — pass `usecols=`:
 df = pd.read_csv("users.csv", usecols=["user_id", "email"])
 ```
 
-**W002 — dropped column does not exist**
+**dropped-unknown-column — dropped column does not exist**
 
 Emitted when `drop(columns=[...])` names a column that isn't in the inferred set:
 
@@ -254,7 +254,7 @@ Emitted when `drop(columns=[...])` names a column that isn't in the inferred set
 from typing import Annotated
 df: Annotated[pd.DataFrame, UserData] = pd.read_csv("users.csv")
 trimmed = df.drop(columns=["nonexistent"])
-# ⚠ W002: Dropped column 'nonexistent' does not exist in UserData
+# ⚠ dropped-unknown-column: Dropped column 'nonexistent' does not exist in UserData
 ```
 
 ### See Also
@@ -279,8 +279,8 @@ typedframes provides **two ways** to check your code:
 typedframes check src/
 
 # Output (ty-style, auto-colored in terminals):
-# src/analysis.py:23:8: error[E001] Column 'profit' not in SalesData
-# src/pipeline.py:56:8: error[E001] Column 'user_name' not in UserData
+# src/analysis.py:23:8: error[unknown-column] Column 'profit' not in SalesData
+# src/pipeline.py:56:8: error[unknown-column] Column 'user_name' not in UserData
 # ✗ Found 2 errors in 47 files (0.0s)
 ```
 
@@ -312,7 +312,7 @@ typedframes check src/ --json
 # Skip cross-file index (single-file mode, faster for quick checks)
 typedframes check src/ --no-index
 
-# Suppress all W001/W002 warnings
+# Suppress all warnings (untracked-dataframe, dropped-unknown-column)
 typedframes check src/ --no-warnings
 ```
 
@@ -939,7 +939,7 @@ MIT License - see [LICENSE](LICENSE)
 - [x] Column name collision warnings
 - [x] Pandera integration (`to_pandera_schema()`)
 - [x] Cross-file schema inference (project-level index, `--no-index` flag)
-- [x] Aggressive column inference (W001/W002 warnings, method chain propagation)
+- [x] Aggressive column inference (untracked-dataframe/dropped-unknown-column warnings, method chain propagation)
 
 **Planned:**
 

@@ -28,9 +28,9 @@ def main() -> None:
     print(df.select(pl.col("user_id")))
 
     # These would be caught by the checker:
-    print(df["name"])  # ✗ E001: Column 'name' not in UserSchema
-    print(df["emai"])  # ✗ E001: Column 'emai' not in UserSchema (did you mean 'email'?)
-    print(df.filter(pl.col("emai").is_not_null()))  # ✗ E001: 'emai' not in UserSchema
+    print(df["name"])  # ✗ unknown-column: Column 'name' not in UserSchema
+    print(df["emai"])  # ✗ unknown-column: Column 'emai' not in UserSchema (did you mean 'email'?)
+    print(df.filter(pl.col("emai").is_not_null()))  # ✗ unknown-column: 'emai' not in UserSchema
 
     # .col gives a refactor-safe polars expression from the descriptor
     print(df.select(UserSchema.email.col))  # same as df.select(pl.col("email"))

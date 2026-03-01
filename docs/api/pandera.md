@@ -22,7 +22,7 @@ class OrderSchema(BaseSchema):
 # Static analysis: checker validates column access at lint time
 def process(df: Annotated[pd.DataFrame, OrderSchema]) -> None:
     print(df["order_id"])   # ✓ validated by typedframes checker
-    print(df["revenue"])    # ✗ E001 at lint time
+    print(df["revenue"])    # ✗ unknown-column at lint time
 
 # Runtime validation: Pandera validates actual data values
 pandera_schema = to_pandera_schema(OrderSchema)

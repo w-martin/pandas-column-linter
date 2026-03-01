@@ -5,10 +5,10 @@ chains — without requiring explicit schema annotations. This example shows:
 
   1. Full schema annotation  (best practice — no warnings)
   2. usecols / columns=      (inferred schema — no warnings)
-  3. No columns specified    (W001 warning — off by default, enable with --strict-ingest)
+  3. No columns specified    (untracked-dataframe warning — off by default, enable with --strict-ingest)
   4. Method chain inference  (select, drop, rename, assign, filter)
 
-W001 is suppressed by default (EDA-friendly mode). To enable it for production CI:
+untracked-dataframe is suppressed by default (EDA-friendly mode). To enable it for production CI:
 
     typedframes check src/ --strict-ingest
 
@@ -58,7 +58,7 @@ def load_annotated() -> None:
 
 
 def load_with_usecols() -> None:
-    """Load with usecols= — checker infers column set, no W001 warning."""
+    """Load with usecols= — checker infers column set, no untracked-dataframe warning."""
     df = pd.read_csv("users.csv", usecols=["user_id", "email"])
     print(df["user_id"])
     print(df["email"])
@@ -95,18 +95,18 @@ def load_parquet_polars() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 3. No columns specified — W001 warning (off by default)
+# 3. No columns specified — untracked-dataframe warning (off by default)
 # ---------------------------------------------------------------------------
 # Without usecols/columns or a schema annotation, the checker assumes an
-# Unknown state and stays quiet. Run with --strict-ingest to enable W001.
+# Unknown state and stays quiet. Run with --strict-ingest to enable the warning.
 #
 # Checker output (with --strict-ingest):
-#   inference_example.py:N:1: warning[W001] columns unknown at lint time; specify
+#   inference_example.py:N:1: warning[untracked-dataframe] columns unknown at lint time; specify
 #     `usecols`/`columns` or annotate: `df: Annotated[pd.DataFrame, MySchema] = pd.read_csv(...)`
 
 
 def load_without_columns() -> None:
-    """Load without column info — generates W001 with --strict-ingest."""
+    """Load without column info — generates untracked-dataframe with --strict-ingest."""
     df = pd.read_csv("users.csv")
     df_pl = pl.read_csv("users.csv")
     print(df, df_pl)
@@ -162,16 +162,16 @@ def polars_select_inference() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 5. Remaining gaps — where W002 still appears
+# 5. Remaining gaps — where dropped-unknown-column still appears
 # ---------------------------------------------------------------------------
 # Even with inferred schemas, some patterns generate warnings.
 
 
 def inference_gaps() -> None:
-    """Show W002: dropping a column not present in the inferred set."""
+    """Show dropped-unknown-column: dropping a column not present in the inferred set."""
     df: Annotated[pd.DataFrame, UserData] = pd.read_csv("users.csv")
 
-    # Dropping a column that the checker knows doesn't exist — W002 warning:
-    # W002: Dropped column 'nonexistent' does not exist in UserData
+    # Dropping a column that the checker knows doesn't exist — dropped-unknown-column warning:
+    # dropped-unknown-column: Dropped column 'nonexistent' does not exist in UserData
     trimmed = df.drop(columns=["nonexistent"])
     print(trimmed)

@@ -28,8 +28,8 @@ def main() -> None:
     print(df["user_id"])
 
     # These would be caught by the checker:
-    print(df["name"])  # ✗ E001: Column 'name' not in UserSchema
-    print(df["emai"])  # ✗ E001: Column 'emai' not in UserSchema (did you mean 'email'?)
+    print(df["name"])  # ✗ unknown-column: Column 'name' not in UserSchema
+    print(df["emai"])  # ✗ unknown-column: Column 'emai' not in UserSchema (did you mean 'email'?)
 
     # .s gives a refactor-safe string name from the descriptor
     print(df[UserSchema.email.s])  # same as df["email"]

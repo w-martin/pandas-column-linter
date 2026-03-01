@@ -102,10 +102,10 @@ def drop_then_reuse(path: str) -> pd.DataFrame:
     """Accesses a column that was dropped earlier in the chain — mutation tracking.
 
     mypy and ty see each intermediate variable as ``pd.DataFrame`` and accept
-    any ``str`` subscript.  typedframes tracks the drop and reports E001 on the
+    any ``str`` subscript.  typedframes tracks the drop and reports unknown-column on the
     stale access.
     """
     orders = pd.read_csv(path, usecols=["order_id", "customer_id", "amount"])
     trimmed = orders.drop(columns=["customer_id"])
-    print(trimmed["customer_id"])  # ✗ E001 — 'customer_id' was dropped
+    print(trimmed["customer_id"])  # ✗ unknown-column — 'customer_id' was dropped
     return trimmed

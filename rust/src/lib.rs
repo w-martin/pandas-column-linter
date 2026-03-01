@@ -248,6 +248,41 @@ fn build_index_internal(project_root: &Path) -> ProjectIndex {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Diagnostic codes
+// ──────────────────────────────────────────────────────────────────────────────
+
+const CODE_UNKNOWN_COLUMN: &str = "unknown-column";
+const CODE_RESERVED_NAME: &str = "reserved-name";
+const CODE_UNTRACKED_DATAFRAME: &str = "untracked-dataframe";
+const CODE_DROPPED_UNKNOWN_COLUMN: &str = "dropped-unknown-column";
+
+/// Return true if the source line at `line` (1-indexed) carries a
+/// `# typedframes: ignore` or `# typedframes: ignore[code]` comment.
+fn is_line_ignored(source: &str, line: usize, code: &str) -> bool {
+    let lines: Vec<&str> = source.lines().collect();
+    if line == 0 || line > lines.len() {
+        return false;
+    }
+    let line_text = lines[line - 1];
+    let marker = "# typedframes: ignore";
+    if let Some(pos) = line_text.find(marker) {
+        let after = &line_text[pos + marker.len()..];
+        // Bare ignore — suppress everything on this line
+        if after.trim_start().is_empty() || after.starts_with(char::is_whitespace) {
+            return true;
+        }
+        // Code-specific ignore: # typedframes: ignore[code1, code2]
+        if after.starts_with('[') {
+            if let Some(end) = after.find(']') {
+                let codes: Vec<&str> = after[1..end].split(',').map(str::trim).collect();
+                return codes.contains(&code);
+            }
+        }
+    }
+    false
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 
 /// Reserved pandas/polars method names that shouldn't be used as column names
 const RESERVED_METHODS: &[&str] = &[
@@ -508,6 +543,8 @@ impl Linter {
         for stmt in parsed.into_syntax().body {
             self.visit_stmt(&stmt, &mut errors);
         }
+
+        errors.retain(|e| !is_line_ignored(source, e.line, &e.code));
 
         Ok(errors)
     }
@@ -886,7 +923,7 @@ impl Linter {
                 errors.push(LintError {
                     line,
                     col,
-                    code: "E001".to_string(),
+                    code: CODE_UNKNOWN_COLUMN.to_string(),
                     message,
                     severity: "error".to_string(),
                 });
@@ -920,7 +957,7 @@ impl Linter {
             errors.push(LintError {
                 line,
                 col,
-                code: "E001".to_string(),
+                code: CODE_UNKNOWN_COLUMN.to_string(),
                 message: format!(
                     "Column '{}' does not exist in {} ({})",
                     col_name, schema_display, context
@@ -1104,7 +1141,7 @@ impl Linter {
                             errors.push(LintError {
                                 line,
                                 col,
-                                code: "E002".to_string(),
+                                code: CODE_RESERVED_NAME.to_string(),
                                 message: format!(
                                     "Column name '{}' in {} conflicts with a pandas/polars method. This will shadow the method when accessed via attribute syntax (df.{}). Consider renaming to '{}_value' or similar.",
                                     col_name, class_def.name, col_name, col_name
@@ -1145,7 +1182,7 @@ impl Linter {
                                             errors.push(LintError {
                                                 line: current_line,
                                                 col: current_col,
-                                                code: "E001".to_string(),
+                                                code: CODE_UNKNOWN_COLUMN.to_string(),
                                                 message: format!("Column '{}' does not exist in {} (mutation tracking)", col_name, schema_name),
                                                 severity: "error".to_string(),
                                             });
@@ -1187,7 +1224,7 @@ impl Linter {
                                                 errors.push(LintError {
                                                     line: current_line,
                                                     col: current_col,
-                                                    code: "E001".to_string(),
+                                                    code: CODE_UNKNOWN_COLUMN.to_string(),
                                                     message: format!(
                                                         "Column '{}' does not exist in {}",
                                                         col, schema_display
@@ -1373,7 +1410,7 @@ impl Linter {
                                                 errors.push(LintError {
                                                     line: current_line,
                                                     col: current_col,
-                                                    code: "W001".to_string(),
+                                                    code: CODE_UNTRACKED_DATAFRAME.to_string(),
                                                     message: "columns unknown at lint time; \
                                                               specify `usecols`/`columns` or \
                                                               annotate: `df: Annotated[pd.DataFrame, MySchema] \
@@ -1433,7 +1470,7 @@ impl Linter {
                                                         errors.push(LintError {
                                                             line: current_line,
                                                             col: current_col,
-                                                            code: "E001".to_string(),
+                                                            code: CODE_UNKNOWN_COLUMN.to_string(),
                                                             message: format!(
                                                                 "Column '{}' does not exist in {}",
                                                                 col, schema_display
@@ -1510,7 +1547,7 @@ impl Linter {
                                                     errors.push(LintError {
                                                         line: current_line,
                                                         col: current_col,
-                                                        code: "W002".to_string(),
+                                                        code: CODE_DROPPED_UNKNOWN_COLUMN.to_string(),
                                                         message: format!(
                                                             "Dropped column '{}' does not exist in {}",
                                                             col, schema_display
@@ -1594,7 +1631,7 @@ impl Linter {
                                                     errors.push(LintError {
                                                         line: current_line,
                                                         col: current_col,
-                                                        code: "E001".to_string(),
+                                                        code: CODE_UNKNOWN_COLUMN.to_string(),
                                                         message: format!(
                                                             "Column '{}' does not exist in {} (rename)",
                                                             old_col, schema_display
@@ -2139,7 +2176,7 @@ impl Linter {
                                 errors.push(LintError {
                                     line,
                                     col,
-                                    code: "E001".to_string(),
+                                    code: CODE_UNKNOWN_COLUMN.to_string(),
                                     message,
                                     severity: "error".to_string(),
                                 });
@@ -2182,7 +2219,7 @@ impl Linter {
                                     errors.push(LintError {
                                         line,
                                         col,
-                                        code: "E001".to_string(),
+                                        code: CODE_UNKNOWN_COLUMN.to_string(),
                                         message,
                                         severity: "error".to_string(),
                                     });
@@ -2633,6 +2670,103 @@ result = df.filter(pl.col("nonexistent_column") > 0)
             .unwrap();
 
         // assert — untracked variable, no column validation
+        assert!(errors.is_empty(), "unexpected errors: {errors:?}");
+    }
+
+    #[test]
+    fn test_should_ignore_all_on_bare_ignore_comment() {
+        // arrange — bare `# typedframes: ignore` suppresses all diagnostics on that line
+        let source = r#"
+from typedframes import BaseSchema, Column
+
+class S(BaseSchema):
+    user_id = Column(type=int)
+
+import pandas as pd
+df = pd.read_csv("data.csv", usecols=["user_id"])
+print(df["revenue"])  # typedframes: ignore
+"#;
+        let mut linter = Linter::new();
+
+        // act
+        let errors = linter
+            .check_file_internal(source, Path::new("test.py"))
+            .unwrap();
+
+        // assert — error on that line is suppressed
+        assert!(errors.is_empty(), "unexpected errors: {errors:?}");
+    }
+
+    #[test]
+    fn test_should_ignore_specific_code() {
+        // arrange — `# typedframes: ignore[unknown-column]` suppresses only that code
+        let source = r#"
+from typedframes import BaseSchema, Column
+
+class S(BaseSchema):
+    user_id = Column(type=int)
+
+import pandas as pd
+df = pd.read_csv("data.csv", usecols=["user_id"])
+print(df["revenue"])  # typedframes: ignore[unknown-column]
+"#;
+        let mut linter = Linter::new();
+
+        // act
+        let errors = linter
+            .check_file_internal(source, Path::new("test.py"))
+            .unwrap();
+
+        // assert — unknown-column on that line is suppressed
+        assert!(errors.is_empty(), "unexpected errors: {errors:?}");
+    }
+
+    #[test]
+    fn test_should_not_ignore_mismatched_code() {
+        // arrange — `# typedframes: ignore[dropped-unknown-column]` does not suppress unknown-column
+        let source = r#"
+from typedframes import BaseSchema, Column
+
+class S(BaseSchema):
+    user_id = Column(type=int)
+
+import pandas as pd
+df = pd.read_csv("data.csv", usecols=["user_id"])
+print(df["revenue"])  # typedframes: ignore[dropped-unknown-column]
+"#;
+        let mut linter = Linter::new();
+
+        // act
+        let errors = linter
+            .check_file_internal(source, Path::new("test.py"))
+            .unwrap();
+
+        // assert — wrong code in brackets, so error is NOT suppressed
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].code, CODE_UNKNOWN_COLUMN);
+    }
+
+    #[test]
+    fn test_should_ignore_comma_separated_codes() {
+        // arrange — `# typedframes: ignore[unknown-column, dropped-unknown-column]`
+        let source = r#"
+from typedframes import BaseSchema, Column
+
+class S(BaseSchema):
+    user_id = Column(type=int)
+
+import pandas as pd
+df = pd.read_csv("data.csv", usecols=["user_id"])
+print(df["revenue"])  # typedframes: ignore[unknown-column, dropped-unknown-column]
+"#;
+        let mut linter = Linter::new();
+
+        // act
+        let errors = linter
+            .check_file_internal(source, Path::new("test.py"))
+            .unwrap();
+
+        // assert — unknown-column is in the comma-separated list, so suppressed
         assert!(errors.is_empty(), "unexpected errors: {errors:?}");
     }
 }

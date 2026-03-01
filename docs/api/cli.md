@@ -14,7 +14,7 @@ typedframes check src/
 # Check without building the project index (each file checked independently)
 typedframes check src/ --no-index
 
-# Enable W001 warnings for bare DataFrame loads (off by default)
+# Enable untracked-dataframe warnings for bare DataFrame loads (off by default)
 typedframes check src/ --strict-ingest
 
 # Output formats
@@ -46,9 +46,9 @@ which columns are available, regardless of file format.
 ## Output format
 
 ```
-src/pipeline.py:42:8: error[E001] Column 'revenue' not in OrderSchema
-src/pipeline.py:57:8: error[E002] Column 'user_id' renamed to 'customer_id', use 'customer_id'
-src/pipeline.py:10:1: warning[W001] columns unknown at lint time; specify usecols= or annotate
+src/pipeline.py:42:8: error[unknown-column] Column 'revenue' not in OrderSchema
+src/pipeline.py:57:8: error[reserved-name] Column 'user_id' renamed to 'customer_id', use 'customer_id'
+src/pipeline.py:10:1: warning[untracked-dataframe] columns unknown at lint time; specify usecols= or annotate
 ```
 
 The format matches ty and ruff: `file:line:col: severity[code] message`. Most editors,
@@ -59,10 +59,10 @@ is a terminal (TTY); piping or redirecting strips them.
 
 | Code | Meaning | Default |
 |------|---------|---------|
-| E001 | Column not found in schema or inferred set | Always shown |
-| E002 | Column was renamed — use the new name | Always shown |
-| W001 | Bare DataFrame load — no column info for checker | Off (use `--strict-ingest`) |
-| W002 | Column access on untracked DataFrame | Off (use `--strict-ingest`) |
+| `unknown-column` | Column not found in schema or inferred set | Always shown |
+| `reserved-name` | Column was renamed — use the new name | Always shown |
+| `untracked-dataframe` | Bare DataFrame load — no column info for checker | Off (use `--strict-ingest`) |
+| `dropped-unknown-column` | Dropped column doesn't exist in schema | Off (use `--strict-ingest`) |
 
 ## Project-level configuration
 

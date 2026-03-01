@@ -86,13 +86,13 @@ checker.
 
 | Code | Severity | Message | Default |
 |------|----------|---------|---------|
-| `E001` | Error | Column `'<name>'` not found in `<Schema>`. Did you mean `'<suggestion>'`? | Always reported |
-| `E002` | Error | Renamed-from column `'<name>'` not found in `<Schema>` | Always reported |
-| `W001` | Warning | Columns unknown at lint time — annotate with a schema to enable column checking | Off by default |
-| `W002` | Warning | (reserved for future use) | — |
+| `unknown-column` | Error | Column `'<name>'` not found in `<Schema>`. Did you mean `'<suggestion>'`? | Always reported |
+| `reserved-name` | Error | Renamed-from column `'<name>'` not found in `<Schema>` | Always reported |
+| `untracked-dataframe` | Warning | Columns unknown at lint time — annotate with a schema to enable column checking | Off by default |
+| `dropped-unknown-column` | Warning | Dropped column `'<name>'` does not exist in `<Schema>` | Off by default |
 
-**W001** is suppressed unless `--strict-ingest` is passed to the CLI. This keeps the
+**untracked-dataframe** is suppressed unless `--strict-ingest` is passed to the CLI. This keeps the
 checker quiet on exploratory scripts that load data without a schema annotation.
 
-**E001** reports the closest column name as a typo suggestion when the edit distance is
+**unknown-column** reports the closest column name as a typo suggestion when the edit distance is
 small (≤ 2 characters), which helps catch common capitalization and spelling mistakes.

@@ -38,8 +38,8 @@ def pandas_example() -> None:
     print("Metadata columns:", df[UserSchema.metadata.s].head())
 
     # These would be caught by the checker:
-    print(df["wrong_column"])  # ✗ E001: Column 'wrong_column' not in UserSchema
-    print(df["user_i"])  # ✗ E001: Column 'user_i' not in UserSchema (did you mean 'user_id'?)
+    print(df["wrong_column"])  # ✗ unknown-column: Column 'wrong_column' not in UserSchema
+    print(df["user_i"])  # ✗ unknown-column: Column 'user_i' not in UserSchema (did you mean 'user_id'?)
 
 
 def polars_example() -> None:
@@ -62,8 +62,8 @@ def polars_example() -> None:
     print("Schema-based filter:\n", result2)
 
     # These would be caught by the checker:
-    print(df["typo_column"])  # ✗ E001: Column 'typo_column' not in UserSchema
-    print(df["user_id_typo"])  # ✗ E001: Column 'user_id_typo' not in UserSchema
+    print(df["typo_column"])  # ✗ unknown-column: Column 'typo_column' not in UserSchema
+    print(df["user_id_typo"])  # ✗ unknown-column: Column 'user_id_typo' not in UserSchema
 
 
 if __name__ == "__main__":

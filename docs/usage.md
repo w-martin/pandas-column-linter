@@ -27,13 +27,13 @@ import pandas as pd
 
 orders = pd.read_csv("orders.csv", usecols=["order_id", "amount", "status"])
 print(orders["amount"])   # ✓ OK
-print(orders["revenue"])  # ✗ E001 — 'revenue' not in inferred set
+print(orders["revenue"])  # ✗ unknown-column — 'revenue' not in inferred set
 ```
 
 Output uses `file:line:col: severity[code] message` format, matching ty and ruff:
 
 ```
-src/pipeline.py:42:8: error[E001] Column 'revenue' not in inferred set
+src/pipeline.py:42:8: error[unknown-column] Column 'revenue' not in inferred set
 ```
 
 The checker infers `{order_id, amount, status}` from `usecols=` and propagates that set
@@ -88,7 +88,7 @@ class UserSchema(BaseSchema):
 
 df: Annotated[pd.DataFrame, UserSchema] = pd.read_csv("users.csv")
 print(df["user_id"])   # ✓ validated by checker
-print(df["username"])  # ✗ E001: 'username' not in UserSchema
+print(df["username"])  # ✗ unknown-column: 'username' not in UserSchema
 
 # Refactor-safe access via .s descriptor (returns the column name as str)
 print(df[UserSchema.user_id.s])
@@ -103,12 +103,12 @@ The checker tracks schema through method chains:
 # rename — checker updates the column set
 renamed = df.rename(columns={"region": "country"})
 print(renamed["country"])  # ✓ OK — renamed
-print(renamed["region"])   # ✗ E001 — renamed to 'country'
+print(renamed["region"])   # ✗ unknown-column — renamed to 'country'
 
 # drop — checker removes the column
 slim = df.drop(columns=["region"])
 print(slim["user_id"])     # ✓ OK
-print(slim["region"])      # ✗ E001 — was dropped
+print(slim["region"])      # ✗ unknown-column — was dropped
 
 # assign — checker adds the new column
 enriched = df.assign(domain=df["email"].str.split("@").str[1])
@@ -135,11 +135,11 @@ df: Annotated[pl.DataFrame, EventSchema] = pl.read_csv("events.csv")
 
 # Subscript access — validated
 print(df["event_id"])   # ✓ OK
-print(df["typo"])        # ✗ E001
+print(df["typo"])        # ✗ unknown-column
 
 # pl.col() references — also validated
 df.select(pl.col("event_id"))           # ✓ OK
-df.filter(pl.col("typo").is_not_null()) # ✗ E001
+df.filter(pl.col("typo").is_not_null()) # ✗ unknown-column
 
 # Descriptor .col access — refactor-safe polars expressions
 df.filter(EventSchema.user_id.col > 100)
@@ -177,13 +177,13 @@ merged: Annotated[pd.DataFrame, ReportSchema] = orders.merge(
 )
 ```
 
-## Exploration mode (W001)
+## Exploration mode (untracked-dataframe)
 
 By default, bare DataFrame loads (no `usecols=` / `columns=` / schema annotation) are
 silent — the checker has no column information and makes no assumptions. This is
 intentional for EDA workflows where you load the full dataset first.
 
-Enable W001 warnings when you want to enforce that every load has column information:
+Enable `untracked-dataframe` warnings when you want to enforce that every load has column information:
 
 ```shell
 typedframes check src/ --strict-ingest

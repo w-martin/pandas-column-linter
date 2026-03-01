@@ -128,7 +128,7 @@ class TestCli(unittest.TestCase):
                 "file": "src/foo.py",
                 "line": 23,
                 "col": 1,
-                "code": "E001",
+                "code": "unknown-column",
                 "message": "Column 'x' not in Schema",
                 "severity": "error",
             },
@@ -136,7 +136,7 @@ class TestCli(unittest.TestCase):
                 "file": "src/bar.py",
                 "line": 10,
                 "col": 1,
-                "code": "E001",
+                "code": "unknown-column",
                 "message": "Column 'y' not in Schema",
                 "severity": "error",
             },
@@ -146,29 +146,50 @@ class TestCli(unittest.TestCase):
         result = _format_text(errors)
 
         # assert
-        self.assertIn("src/foo.py:23:1: error[E001] Column 'x' not in Schema", result)
-        self.assertIn("src/bar.py:10:1: error[E001] Column 'y' not in Schema", result)
+        self.assertIn("src/foo.py:23:1: error[unknown-column] Column 'x' not in Schema", result)
+        self.assertIn("src/bar.py:10:1: error[unknown-column] Column 'y' not in Schema", result)
 
     def test_should_format_warning_with_severity_label(self) -> None:
         """Test that errors use 'error[code]' and warnings use 'warning[code]' labels."""
         # arrange
         items = [
-            {"file": "a.py", "line": 1, "col": 4, "code": "E001", "message": "error msg", "severity": "error"},
-            {"file": "b.py", "line": 2, "col": 1, "code": "W001", "message": "warn msg", "severity": "warning"},
+            {
+                "file": "a.py",
+                "line": 1,
+                "col": 4,
+                "code": "unknown-column",
+                "message": "error msg",
+                "severity": "error",
+            },
+            {
+                "file": "b.py",
+                "line": 2,
+                "col": 1,
+                "code": "untracked-dataframe",
+                "message": "warn msg",
+                "severity": "warning",
+            },
         ]
 
         # act
         result = _format_text(items)
 
         # assert
-        self.assertIn("a.py:1:4: error[E001] error msg", result)
-        self.assertIn("b.py:2:1: warning[W001] warn msg", result)
+        self.assertIn("a.py:1:4: error[unknown-column] error msg", result)
+        self.assertIn("b.py:2:1: warning[untracked-dataframe] warn msg", result)
 
     def test_should_format_text_with_color(self) -> None:
         """Test that color=True adds ANSI escape codes to the output."""
         # arrange
         errors = [
-            {"file": "f.py", "line": 1, "col": 1, "code": "E001", "message": "bad column", "severity": "error"},
+            {
+                "file": "f.py",
+                "line": 1,
+                "col": 1,
+                "code": "unknown-column",
+                "message": "bad column",
+                "severity": "error",
+            },
         ]
 
         # act
@@ -186,7 +207,7 @@ class TestCli(unittest.TestCase):
                 "file": "src/foo.py",
                 "line": 42,
                 "col": 8,
-                "code": "E001",
+                "code": "unknown-column",
                 "message": "Column 'x' not in Schema",
                 "severity": "error",
             },
@@ -194,7 +215,7 @@ class TestCli(unittest.TestCase):
                 "file": "src/bar.py",
                 "line": 10,
                 "col": 1,
-                "code": "W001",
+                "code": "untracked-dataframe",
                 "message": "columns unknown",
                 "severity": "warning",
             },
@@ -204,8 +225,8 @@ class TestCli(unittest.TestCase):
         result = _format_github(errors)
 
         # assert
-        self.assertIn("::error file=src/foo.py,line=42,col=8,title=E001::Column 'x' not in Schema", result)
-        self.assertIn("::warning file=src/bar.py,line=10,col=1,title=W001::columns unknown", result)
+        self.assertIn("::error file=src/foo.py,line=42,col=8,title=unknown-column::Column 'x' not in Schema", result)
+        self.assertIn("::warning file=src/bar.py,line=10,col=1,title=untracked-dataframe::columns unknown", result)
 
     def test_should_output_json_when_flag_set(self) -> None:
         """Test JSON output mode via --json flag."""
@@ -252,7 +273,7 @@ class TestCli(unittest.TestCase):
             "file": "f.py",
             "line": 5,
             "col": 4,
-            "code": "E001",
+            "code": "unknown-column",
             "message": "Column 'x' not found",
             "severity": "error",
         }
@@ -271,7 +292,7 @@ class TestCli(unittest.TestCase):
 
             # assert
             output = captured.getvalue()
-            self.assertIn("::error file=f.py,line=5,col=4,title=E001::Column 'x' not found", output)
+            self.assertIn("::error file=f.py,line=5,col=4,title=unknown-column::Column 'x' not found", output)
 
     def test_should_output_github_format_clean_file(self) -> None:
         """Test GitHub Actions format with no errors produces no annotation output."""
@@ -441,7 +462,7 @@ class TestCli(unittest.TestCase):
             self.assertIn("\u2713 Checked 1 file", output)
 
     def test_should_suppress_warnings_with_no_warnings_flag(self) -> None:
-        """Test that --no-warnings suppresses W001/W002 warnings from output."""
+        """Test that --no-warnings suppresses untracked-dataframe/dropped-unknown-column warnings from output."""
         # arrange
         with tempfile.TemporaryDirectory() as tmpdir:
             py_file = Path(tmpdir) / "warn.py"
@@ -465,7 +486,7 @@ class TestCli(unittest.TestCase):
             "file": "mixed.py",
             "line": 2,
             "col": 0,
-            "code": "W002",
+            "code": "dropped-unknown-column",
             "message": "Dropped column 'x' does not exist in Schema",
             "severity": "warning",
         }
@@ -473,7 +494,7 @@ class TestCli(unittest.TestCase):
             "file": "mixed.py",
             "line": 7,
             "col": 0,
-            "code": "E001",
+            "code": "unknown-column",
             "message": "Column 'wrong' not in Schema",
             "severity": "error",
         }
@@ -493,18 +514,18 @@ class TestCli(unittest.TestCase):
 
             # assert
             output = captured.getvalue()
-            self.assertNotIn("W001", output)
+            self.assertNotIn("Dropped column", output)
             self.assertIn("Column 'wrong'", output)
             self.assertIn("1 error", output)
 
-    def test_should_suppress_w001_by_default(self) -> None:
-        """Test that W001 ingestion warnings are suppressed by default."""
+    def test_should_suppress_untracked_dataframe_by_default(self) -> None:
+        """Test that untracked-dataframe warnings are suppressed by default."""
         # arrange
-        w001 = {
+        w = {
             "file": "f.py",
             "line": 1,
             "col": 0,
-            "code": "W001",
+            "code": "untracked-dataframe",
             "message": "columns unknown at lint time",
             "severity": "warning",
         }
@@ -515,7 +536,7 @@ class TestCli(unittest.TestCase):
 
             # act
             with (
-                patch("typedframes.cli._check_files", return_value=[w001]),
+                patch("typedframes.cli._check_files", return_value=[w]),
                 patch("sys.stdout", captured),
             ):
                 main(["check", str(py_file)])
@@ -525,14 +546,14 @@ class TestCli(unittest.TestCase):
             self.assertNotIn("columns unknown at lint time", output)
             self.assertIn("\u2713 Checked 1 file", output)
 
-    def test_should_show_w001_with_strict_ingest_flag(self) -> None:
-        """Test that --strict-ingest enables W001 ingestion warnings."""
+    def test_should_show_untracked_dataframe_with_strict_ingest_flag(self) -> None:
+        """Test that --strict-ingest enables untracked-dataframe warnings."""
         # arrange
-        w001 = {
+        w = {
             "file": "f.py",
             "line": 1,
             "col": 0,
-            "code": "W001",
+            "code": "untracked-dataframe",
             "message": "columns unknown at lint time",
             "severity": "warning",
         }
@@ -543,7 +564,7 @@ class TestCli(unittest.TestCase):
 
             # act
             with (
-                patch("typedframes.cli._check_files", return_value=[w001]),
+                patch("typedframes.cli._check_files", return_value=[w]),
                 patch("sys.stdout", captured),
             ):
                 main(["check", str(py_file), "--strict-ingest"])

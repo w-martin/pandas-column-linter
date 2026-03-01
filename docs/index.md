@@ -16,7 +16,7 @@ class UserData(BaseSchema):
 
 df: Annotated[pd.DataFrame, UserData] = pd.read_csv("users.csv")
 df['user_id']    # ✓ Validated by checker
-df['username']   # ✗ E001: Column 'username' not in UserData
+df['username']   # ✗ unknown-column: Column 'username' not in UserData
 ```
 
 ```shell
@@ -37,7 +37,7 @@ import pandas as pd
 # Checker infers {order_id, amount, status} from usecols= — no annotation needed
 orders = pd.read_csv("orders.csv", usecols=["order_id", "amount", "status"])
 print(orders["amount"])   # ✓ OK
-print(orders["revenue"])  # ✗ E001 — 'revenue' not in inferred set
+print(orders["revenue"])  # ✗ unknown-column — 'revenue' not in inferred set
 ```
 
 ## Progressive adoption

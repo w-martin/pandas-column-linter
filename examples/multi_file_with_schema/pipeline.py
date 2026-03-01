@@ -84,7 +84,7 @@ def wrong_column_cross_file(path: str) -> None:
     """Accesses a column absent from OrderSchema — caught via the project index.
 
     ``load_orders`` is in ``loaders.py``, ``OrderSchema`` is in ``schemas.py``.
-    The checker traces all three files and reports E001.
+    The checker traces all three files and reports unknown-column.
     """
     orders = load_orders(path)
-    print(orders["revenue"])  # ✗ E001 — 'revenue' not in OrderSchema
+    print(orders["revenue"])  # ✗ unknown-column — 'revenue' not in OrderSchema

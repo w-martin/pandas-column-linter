@@ -106,12 +106,14 @@ def main(argv: list[str] | None = None) -> None:
     )
     check_parser.add_argument("--no-index", action="store_true", help="Disable cross-file index.")
     check_parser.add_argument(
-        "--no-warnings", action="store_true", help="Suppress all warnings (W002 and any enabled ingestion warnings)."
+        "--no-warnings",
+        action="store_true",
+        help="Suppress all warnings (dropped-unknown-column and any enabled ingestion warnings).",
     )
     check_parser.add_argument(
         "--strict-ingest",
         action="store_true",
-        help="Include W001 warnings for unannotated DataFrame ingestion (e.g. pd.read_csv without usecols).",
+        help="Include untracked-dataframe warnings for bare DataFrame loads without usecols= or columns=.",
     )
 
     args = parser.parse_args(argv)
@@ -188,7 +190,7 @@ def _run_check(args: argparse.Namespace) -> None:
     elapsed = time.perf_counter() - start
 
     if not args.strict_ingest:
-        all_errors = [e for e in all_errors if e.get("code") != "W001"]
+        all_errors = [e for e in all_errors if e.get("code") != "untracked-dataframe"]
 
     if args.no_warnings:
         all_errors = [e for e in all_errors if e.get("severity") != "warning"]

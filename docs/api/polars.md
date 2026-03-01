@@ -21,7 +21,7 @@ df: Annotated[pl.DataFrame, EventSchema] = pl.read_csv("events.csv")
 # Native polars — both forms validated by checker
 print(df.select(pl.col("event_id")))             # ✓ pl.col() validated
 print(df.filter(pl.col("timestamp").is_not_null()))  # ✓ pl.col() in filter
-print(df.select(pl.col("typo")))                  # ✗ E001 — 'typo' not in EventSchema
+print(df.select(pl.col("typo")))                  # ✗ unknown-column — 'typo' not in EventSchema
 
 # Descriptor access — refactor-safe polars expressions
 df.select(EventSchema.event_id.col, EventSchema.user_id.col)

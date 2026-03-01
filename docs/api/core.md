@@ -17,7 +17,7 @@ class UserSchema(BaseSchema):
 # Annotate with the schema — the checker validates all downstream column access
 df: Annotated[pd.DataFrame, UserSchema] = pd.read_csv("users.csv")
 print(df["user_id"])   # ✓ validated at lint time
-print(df["username"])  # ✗ E001: 'username' not in UserSchema
+print(df["username"])  # ✗ unknown-column: 'username' not in UserSchema
 ```
 
 ## Descriptor access

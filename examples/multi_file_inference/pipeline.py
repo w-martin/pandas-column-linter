@@ -5,7 +5,7 @@ know which columns that DataFrame holds once the call crosses a file boundary,
 so it cannot validate subscript access here — bad column names pass silently.
 
 Compare with ``examples/multi_file_with_schema/pipeline.py``, where the same
-call pattern produces a caught E001 error because the return type annotation
+call pattern produces a caught unknown-column error because the return type annotation
 carries ``OrderSchema`` into the project index.
 """
 

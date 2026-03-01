@@ -5,7 +5,7 @@
 The checker works from day one with no schema classes.  `loaders.py` and
 `transforms.py` use `usecols=` / `columns=` / `dtype=` to give the checker
 column information; method chains (rename, drop, assign, select) propagate that
-information forward.  Two intentional bugs are caught as E001 errors.
+information forward.  Two intentional bugs are caught as unknown-column errors.
 
 `pipeline.py` shows the ceiling of inference alone: `load_orders` returns plain
 `pd.DataFrame`, so the checker has nothing to validate against at the call site
@@ -38,7 +38,7 @@ uv run typedframes check multi_file_with_schema/
 ## inference_example.py
 
 Single-file walkthrough of all inference modes: full schema annotation,
-`usecols=` inference, bare load (W001 — off by default, enable with
+`usecols=` inference, bare load (`untracked-dataframe` — off by default, enable with
 `--strict-ingest`), and method-chain propagation through rename / drop /
 assign / filter.
 

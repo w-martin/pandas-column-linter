@@ -69,8 +69,8 @@ def load_with_wrong_column(path: str) -> pd.DataFrame:
 
     mypy and ty see ``df["revenue"]`` as a valid ``str`` subscript that returns
     ``Any``.  typedframes knows the inferred column set is
-    ``{order_id, amount, status}`` and reports E001.
+    ``{order_id, amount, status}`` and reports unknown-column.
     """
     df = pd.read_csv(path, usecols=["order_id", "amount", "status"])
-    print(df["revenue"])  # ✗ E001 — 'revenue' not in {order_id, amount, status}
+    print(df["revenue"])  # ✗ unknown-column — 'revenue' not in {order_id, amount, status}
     return df

@@ -301,7 +301,7 @@ _ = trimmed["foo"]
             Path(temp_file).unlink()
 
     def test_should_warn_when_dropping_unknown_column(self) -> None:
-        """Test that dropping a column not in the schema emits a W002 warning."""
+        """Test that dropping a column not in the schema emits a dropped-unknown-column warning."""
         # arrange
         source = """
 from typedframes import BaseSchema, Column
@@ -421,7 +421,7 @@ _ = df["c"]
             Path(temp_file).unlink()
 
     def test_should_warn_when_load_has_no_columns_specified(self) -> None:
-        """Test that pd.read_csv without column info emits a W001 warning."""
+        """Test that pd.read_csv without column info emits an untracked-dataframe warning."""
         # arrange
         source = """
 import pandas as pd
@@ -445,7 +445,7 @@ df = pd.read_csv("x.csv")
             Path(temp_file).unlink()
 
     def test_should_not_warn_when_load_has_schema_annotation(self) -> None:
-        """Test that df: PandasFrame[MySchema] = pd.read_csv(...) does not emit W001."""
+        """Test that df: PandasFrame[MySchema] = pd.read_csv(...) does not emit untracked-dataframe."""
         # arrange
         source = """
 import pandas as pd
@@ -469,7 +469,7 @@ _ = df["c"]
             result = check_file(temp_file, None)
             errors = json.loads(result)
 
-            # assert — no W001; "c" errors from schema; no warning for "a"
+            # assert — no untracked-dataframe; "c" errors from schema; no warning for "a"
             warnings = [e for e in errors if e.get("severity") == "warning"]
             self.assertEqual(len(warnings), 0)
             messages = [e["message"] for e in errors]
