@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "typedframes"
-version = "0.2.0"
+version = "0.2.1"
 description = "Static analysis for pandas and polars DataFrames. Catch column errors at lint-time, not runtime."
 readme = "README.md"
 authors = [
@@ -12,6 +12,13 @@ authors = [
 ]
 license = { text = "MIT" }
 requires-python = ">=3.11"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
 dependencies = []
 
 [project.scripts]
