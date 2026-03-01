@@ -47,6 +47,12 @@ jobs:
       - name: Python tests
         run: uv run inv test
 
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false
+
   verify-version:
     name: Verify tag matches pyproject.toml version
     needs: [lint-and-test]
