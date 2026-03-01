@@ -30,8 +30,22 @@ print(orders["amount"])   # ✓ OK
 print(orders["revenue"])  # ✗ E001 — 'revenue' not in inferred set
 ```
 
+Output uses `file:line:col: severity[code] message` format, matching ty and ruff:
+
+```
+src/pipeline.py:42:8: error[E001] Column 'revenue' not in inferred set
+```
+
 The checker infers `{order_id, amount, status}` from `usecols=` and propagates that set
 through `.rename()`, `.drop()`, `.assign()`, and `.select()` chains.
+
+**Any file format works.** `read_parquet`, `read_json`, `read_excel`, and `read_feather`
+are all recognized — just pass `columns=` / `usecols=` to supply column names:
+
+```python
+df = pd.read_parquet("orders.parquet", columns=["order_id", "amount"])
+pl_df = pl.read_parquet("orders.parquet", columns=["order_id", "amount"])
+```
 
 ## Step 2 — Add a schema class
 

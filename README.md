@@ -100,8 +100,8 @@ print(orders["revenue"])  # ✗ E001 — 'revenue' not in inferred set
 
 ```shell
 typedframes check src/
-# ✓ Checked 12 files in 0.0s
-# ✗ src/pipeline.py:7 - Column 'revenue' not in inferred set {order_id, amount, status}
+# src/pipeline.py:7:8: error[E001] Column 'revenue' not in inferred set {order_id, amount, status}
+# ✗ Found 1 error in 12 files (0.0s)
 ```
 
 See [`examples/multi_file_inference/`](examples/multi_file_inference/) for a multi-file example with no `BaseSchema`
@@ -278,10 +278,10 @@ typedframes provides **two ways** to check your code:
 # Blazing fast Rust-based checker
 typedframes check src/
 
-# Output:
-# ✓ Checked 47 files in 0.0s
-# ✗ src/analysis.py:23 - Column 'profit' not in SalesData
-# ✗ src/pipeline.py:56 - Column 'user_name' not in UserData
+# Output (ty-style, auto-colored in terminals):
+# src/analysis.py:23:8: error[E001] Column 'profit' not in SalesData
+# src/pipeline.py:56:8: error[E001] Column 'user_name' not in UserData
+# ✗ Found 2 errors in 47 files (0.0s)
 ```
 
 **Features:**

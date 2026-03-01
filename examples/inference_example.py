@@ -73,13 +73,35 @@ def load_polars_with_columns() -> None:
 
 
 # ---------------------------------------------------------------------------
+# 2b. Parquet files — same inference, same validation
+# ---------------------------------------------------------------------------
+# read_parquet (pandas and polars) is treated identically to read_csv.
+# Pass columns= to give the checker a column set.
+
+
+def load_parquet_pandas() -> None:
+    """Pandas read_parquet with columns= — checker infers column set."""
+    df = pd.read_parquet("users.parquet", columns=["user_id", "email"])
+    print(df["user_id"])
+    print(df["email"])
+    # Accessing df["age"] would error: 'age' not in inferred column set
+
+
+def load_parquet_polars() -> None:
+    """Polars read_parquet with columns= — same inference as read_csv."""
+    df = pl.read_parquet("users.parquet", columns=["user_id", "email"])
+    print(df["user_id"])
+    # Accessing df["age"] would error: 'age' not in inferred column set
+
+
+# ---------------------------------------------------------------------------
 # 3. No columns specified — W001 warning (off by default)
 # ---------------------------------------------------------------------------
 # Without usecols/columns or a schema annotation, the checker assumes an
 # Unknown state and stays quiet. Run with --strict-ingest to enable W001.
 #
 # Checker output (with --strict-ingest):
-#   warning inference_example.py:N - columns unknown at lint time; specify
+#   inference_example.py:N:1: warning[W001] columns unknown at lint time; specify
 #     `usecols`/`columns` or annotate: `df: Annotated[pd.DataFrame, MySchema] = pd.read_csv(...)`
 
 

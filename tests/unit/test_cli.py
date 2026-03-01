@@ -8,7 +8,7 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
-from typedframes.cli import _check_files, _collect_python_files, _format_human, main
+from typedframes.cli import _check_files, _collect_python_files, _format_github, _format_text, main
 
 
 class TestCli(unittest.TestCase):
@@ -120,38 +120,95 @@ class TestCli(unittest.TestCase):
             self.assertIn("a.py", names)
             self.assertIn("c.py", names)
 
-    def test_should_format_human_readable_errors(self) -> None:
-        """Test human-readable error formatting."""
+    def test_should_format_text_errors(self) -> None:
+        """Test text error formatting uses ty-style file:line:col: severity[code] message."""
         # arrange
         errors = [
-            {"file": "src/foo.py", "line": 23, "col": 0, "message": "Column 'x' not in Schema"},
-            {"file": "src/bar.py", "line": 10, "col": 0, "message": "Column 'y' not in Schema"},
+            {
+                "file": "src/foo.py",
+                "line": 23,
+                "col": 1,
+                "code": "E001",
+                "message": "Column 'x' not in Schema",
+                "severity": "error",
+            },
+            {
+                "file": "src/bar.py",
+                "line": 10,
+                "col": 1,
+                "code": "E001",
+                "message": "Column 'y' not in Schema",
+                "severity": "error",
+            },
         ]
 
         # act
-        result = _format_human(errors)
+        result = _format_text(errors)
 
         # assert
-        self.assertIn("\u2717 src/foo.py:23 - Column 'x' not in Schema", result)
-        self.assertIn("\u2717 src/bar.py:10 - Column 'y' not in Schema", result)
+        self.assertIn("src/foo.py:23:1: error[E001] Column 'x' not in Schema", result)
+        self.assertIn("src/bar.py:10:1: error[E001] Column 'y' not in Schema", result)
 
-    def test_should_format_warning_with_warning_icon(self) -> None:
-        """Test that warnings use the ⚠ icon and errors use ✗."""
+    def test_should_format_warning_with_severity_label(self) -> None:
+        """Test that errors use 'error[code]' and warnings use 'warning[code]' labels."""
         # arrange
         items = [
-            {"file": "a.py", "line": 1, "col": 0, "message": "error msg", "severity": "error"},
-            {"file": "b.py", "line": 2, "col": 0, "message": "warn msg", "severity": "warning"},
+            {"file": "a.py", "line": 1, "col": 4, "code": "E001", "message": "error msg", "severity": "error"},
+            {"file": "b.py", "line": 2, "col": 1, "code": "W001", "message": "warn msg", "severity": "warning"},
         ]
 
         # act
-        result = _format_human(items)
+        result = _format_text(items)
 
         # assert
-        self.assertIn("\u2717 a.py:1 - error msg", result)
-        self.assertIn("\u26a0 b.py:2 - warn msg", result)
+        self.assertIn("a.py:1:4: error[E001] error msg", result)
+        self.assertIn("b.py:2:1: warning[W001] warn msg", result)
+
+    def test_should_format_text_with_color(self) -> None:
+        """Test that color=True adds ANSI escape codes to the output."""
+        # arrange
+        errors = [
+            {"file": "f.py", "line": 1, "col": 1, "code": "E001", "message": "bad column", "severity": "error"},
+        ]
+
+        # act
+        result = _format_text(errors, color=True)
+
+        # assert — ANSI bold and red codes are present
+        self.assertIn("\033[", result)
+        self.assertIn("bad column", result)
+
+    def test_should_format_github_annotations(self) -> None:
+        """Test GitHub Actions annotation format."""
+        # arrange
+        errors = [
+            {
+                "file": "src/foo.py",
+                "line": 42,
+                "col": 8,
+                "code": "E001",
+                "message": "Column 'x' not in Schema",
+                "severity": "error",
+            },
+            {
+                "file": "src/bar.py",
+                "line": 10,
+                "col": 1,
+                "code": "W001",
+                "message": "columns unknown",
+                "severity": "warning",
+            },
+        ]
+
+        # act
+        result = _format_github(errors)
+
+        # assert
+        self.assertIn("::error file=src/foo.py,line=42,col=8,title=E001::Column 'x' not in Schema", result)
+        self.assertIn("::warning file=src/bar.py,line=10,col=1,title=W001::columns unknown", result)
 
     def test_should_output_json_when_flag_set(self) -> None:
-        """Test JSON output mode."""
+        """Test JSON output mode via --json flag."""
         # arrange
         import tempfile
 
@@ -169,6 +226,69 @@ class TestCli(unittest.TestCase):
             output = captured.getvalue()
             parsed = json.loads(output)
             self.assertIsInstance(parsed, list)
+
+    def test_should_output_json_when_output_format_json(self) -> None:
+        """Test JSON output mode via --output-format json."""
+        # arrange
+        with tempfile.TemporaryDirectory() as tmpdir:
+            py_file = Path(tmpdir) / "clean.py"
+            py_file.write_text("x = 1\n")
+
+            captured = StringIO()
+
+            # act
+            with patch("sys.stdout", captured):
+                main(["check", str(py_file), "--output-format", "json"])
+
+            # assert
+            output = captured.getvalue()
+            parsed = json.loads(output)
+            self.assertIsInstance(parsed, list)
+
+    def test_should_output_github_format(self) -> None:
+        """Test GitHub Actions annotation output via --output-format github."""
+        # arrange
+        error = {
+            "file": "f.py",
+            "line": 5,
+            "col": 4,
+            "code": "E001",
+            "message": "Column 'x' not found",
+            "severity": "error",
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            py_file = Path(tmpdir) / "f.py"
+            py_file.write_text("x = 1\n")
+
+            captured = StringIO()
+
+            # act
+            with (
+                patch("typedframes.cli._check_files", return_value=[error]),
+                patch("sys.stdout", captured),
+            ):
+                main(["check", str(py_file), "--output-format", "github"])
+
+            # assert
+            output = captured.getvalue()
+            self.assertIn("::error file=f.py,line=5,col=4,title=E001::Column 'x' not found", output)
+
+    def test_should_output_github_format_clean_file(self) -> None:
+        """Test GitHub Actions format with no errors produces no annotation output."""
+        # arrange
+        with tempfile.TemporaryDirectory() as tmpdir:
+            py_file = Path(tmpdir) / "clean.py"
+            py_file.write_text("x = 1\n")
+
+            captured = StringIO()
+
+            # act
+            with patch("sys.stdout", captured):
+                main(["check", str(py_file), "--output-format", "github"])
+
+            # assert — no annotation lines emitted for clean file
+            output = captured.getvalue()
+            self.assertNotIn("::", output)
 
     def test_should_exit_0_when_strict_and_no_errors(self) -> None:
         """Test that --strict exits 0 when there are no errors."""

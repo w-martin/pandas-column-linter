@@ -8,6 +8,13 @@ import sys
 import time
 from pathlib import Path
 
+# ANSI escape sequences
+_RESET = "\033[0m"
+_BOLD = "\033[1m"
+_BOLD_RED = "\033[1;31m"
+_BOLD_GREEN = "\033[1;32m"
+_BOLD_YELLOW = "\033[1;33m"
+
 
 def _collect_python_files(path: Path) -> list[Path]:
     """Collect all .py files from a path (file or directory)."""
@@ -40,12 +47,37 @@ def _check_files(files: list[Path], *, index_bytes: bytes | None = None) -> list
     return all_errors
 
 
-def _format_human(errors: list[dict]) -> str:
-    """Format errors as human-readable lines."""
+def _format_text(errors: list[dict], *, color: bool = False) -> str:
+    """Format errors as text lines using ty-style file:line:col: severity[code] message."""
     lines = []
     for error in errors:
-        icon = "\u26a0" if error.get("severity") == "warning" else "\u2717"
-        lines.append(f"{icon} {error['file']}:{error['line']} - {error['message']}")
+        severity = error.get("severity", "error")
+        code = error.get("code", "")
+        file_ = error["file"]
+        line = error["line"]
+        col = error["col"]
+        message = error["message"]
+        code_part = f"[{code}]" if code else ""
+        if color:
+            sev_colored = f"{_BOLD_RED}error{_RESET}" if severity == "error" else f"{_BOLD_YELLOW}warning{_RESET}"
+            lines.append(f"{_BOLD}{file_}{_RESET}:{line}:{col}: {sev_colored}{code_part} {message}")
+        else:
+            lines.append(f"{file_}:{line}:{col}: {severity}{code_part} {message}")
+    return "\n".join(lines)
+
+
+def _format_github(errors: list[dict]) -> str:
+    """Format errors as GitHub Actions workflow commands."""
+    lines = []
+    for error in errors:
+        severity = error.get("severity", "error")
+        code = error.get("code", "")
+        file_ = error["file"]
+        line = error["line"]
+        col = error["col"]
+        message = error["message"]
+        title = code or severity
+        lines.append(f"::{severity} file={file_},line={line},col={col},title={title}::{message}")
     return "\n".join(lines)
 
 
@@ -57,7 +89,21 @@ def main(argv: list[str] | None = None) -> None:
     check_parser = subparsers.add_parser("check", help="Check Python files for column errors.")
     check_parser.add_argument("path", type=Path, help="File or directory to check.")
     check_parser.add_argument("--strict", action="store_true", help="Exit with code 1 if any errors are found.")
-    check_parser.add_argument("--json", dest="json_output", action="store_true", help="Output results as JSON.")
+    check_parser.add_argument(
+        "--output-format",
+        choices=["text", "json", "github"],
+        default="text",
+        dest="output_format",
+        help="Output format: text (default), json, or github (GitHub Actions annotations).",
+    )
+    # --json kept as a hidden alias for backward compatibility
+    check_parser.add_argument(
+        "--json",
+        dest="output_format",
+        action="store_const",
+        const="json",
+        help=argparse.SUPPRESS,
+    )
     check_parser.add_argument("--no-index", action="store_true", help="Disable cross-file index.")
     check_parser.add_argument(
         "--no-warnings", action="store_true", help="Suppress all warnings (W002 and any enabled ingestion warnings)."
@@ -77,16 +123,27 @@ def main(argv: list[str] | None = None) -> None:
     _run_check(args)
 
 
-def _print_results(files: list[Path], all_errors: list[dict], elapsed: float, *, json_output: bool) -> None:
-    """Print check results in human-readable or JSON format."""
+def _print_results(files: list[Path], all_errors: list[dict], elapsed: float, *, output_format: str) -> None:
+    """Print check results in the requested format."""
     errors_only = [e for e in all_errors if e.get("severity") != "warning"]
     warnings = [e for e in all_errors if e.get("severity") == "warning"]
-    if json_output:
+
+    if output_format == "json":
         print(json.dumps(all_errors, indent=2))
         return
+
+    use_color = output_format == "text" and hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
+
+    if output_format == "github":
+        if all_errors:
+            print(_format_github(all_errors))
+        return
+
+    # text format
     if all_errors:
-        print(_format_human(all_errors))
+        print(_format_text(all_errors, color=use_color))
         print()
+
     file_label = "file" if len(files) == 1 else "files"
     if errors_only or warnings:
         parts = []
@@ -97,9 +154,11 @@ def _print_results(files: list[Path], all_errors: list[dict], elapsed: float, *,
             warn_label = "warning" if len(warnings) == 1 else "warnings"
             parts.append(f"{len(warnings)} {warn_label}")
         summary = ", ".join(parts)
-        print(f"\u2717 Found {summary} in {len(files)} {file_label} ({elapsed:.1f}s)")
+        msg = f"\u2717 Found {summary} in {len(files)} {file_label} ({elapsed:.1f}s)"
+        print(f"{_BOLD_RED}{msg}{_RESET}" if use_color else msg)
     else:
-        print(f"\u2713 Checked {len(files)} {file_label} in {elapsed:.1f}s")
+        msg = f"\u2713 Checked {len(files)} {file_label} in {elapsed:.1f}s"
+        print(f"{_BOLD_GREEN}{msg}{_RESET}" if use_color else msg)
 
 
 def _run_check(args: argparse.Namespace) -> None:
@@ -135,7 +194,7 @@ def _run_check(args: argparse.Namespace) -> None:
         all_errors = [e for e in all_errors if e.get("severity") != "warning"]
 
     errors_only = [e for e in all_errors if e.get("severity") != "warning"]
-    _print_results(files, all_errors, elapsed, json_output=args.json_output)
+    _print_results(files, all_errors, elapsed, output_format=args.output_format)
 
     if args.strict and errors_only:
         sys.exit(1)
