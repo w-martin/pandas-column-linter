@@ -6,7 +6,6 @@ import pandas as pd
 import polars as pl
 
 from typedframes import BaseSchema, Column, ColumnSet
-from typedframes.pandas import PandasFrame
 
 
 class UserSchema(BaseSchema):
@@ -18,8 +17,8 @@ class UserSchema(BaseSchema):
 
 
 def pandas_example() -> None:
-    """Demonstrate PandasFrame usage with schema-aware column access."""
-    raw_df = pd.DataFrame(
+    """Demonstrate Annotated[pd.DataFrame, Schema] with column validation."""
+    df: Annotated[pd.DataFrame, UserSchema] = pd.DataFrame(
         {
             "user_id": [1, 2, 3],
             "email_address": ["a@b.com", "c@d.com", "e@f.com"],
@@ -28,24 +27,23 @@ def pandas_example() -> None:
         },
     )
 
-    # Create a typed PandasFrame
-    df: PandasFrame[UserSchema] = PandasFrame.from_schema(raw_df, UserSchema)
+    # String access — validated by the checker
+    print("User IDs:", df["user_id"].tolist())
+    print("Emails:", df["email_address"].tolist())
 
-    # Access columns by schema descriptors
-    print("User IDs:", df[UserSchema.user_id].tolist())
-    print("Emails:", df[UserSchema.email].tolist())  # Resolves alias automatically
+    # .s gives a refactor-safe string name from the descriptor
+    print("User IDs via descriptor:", df[UserSchema.user_id.s].tolist())
 
-    # Schema operations preserve type
-    filtered = df[df[UserSchema.user_id] > 1]
-    print("Filtered schema:", filtered.schema)
+    # Metadata columns via .s on the ColumnSet
+    print("Metadata columns:", df[UserSchema.metadata.s].head())
 
-    # This would be caught by the linter:
-    print(df["wrong_column"])  # Error: Column 'wrong_column' does not exist
-    print(df["user_i"])  # Error: Column 'user_i' does not exist (typo)
+    # These would be caught by the checker:
+    print(df["wrong_column"])  # ✗ E001: Column 'wrong_column' not in UserSchema
+    print(df["user_i"])  # ✗ E001: Column 'user_i' not in UserSchema (did you mean 'user_id'?)
 
 
 def polars_example() -> None:
-    """Demonstrate PolarsFrame usage with full autocomplete."""
+    """Demonstrate Annotated[pl.DataFrame, Schema] with pl.col() validation."""
     df: Annotated[pl.DataFrame, UserSchema] = pl.DataFrame(
         {
             "user_id": [1, 2, 3],
@@ -55,21 +53,17 @@ def polars_example() -> None:
         },
     )
 
-    # Full polars API with autocomplete
+    # pl.col() references are validated by the checker
     result = df.filter(pl.col("user_id") > 1)
     print("Filtered polars:\n", result)
 
-    # Use schema column references for type-safe access
+    # .col gives a refactor-safe polars expression from the descriptor
     result2 = df.filter(UserSchema.user_id.col > 1)
     print("Schema-based filter:\n", result2)
 
-    # Select using schema columns
-    result3 = df.select(UserSchema.user_id.col, UserSchema.email.col)
-    print("Selected columns:\n", result3)
-
-    # This would be caught by the linter:
-    print(df["typo_column"])  # Error: Column 'typo_column' does not exist
-    print(df["user_id_typo"])
+    # These would be caught by the checker:
+    print(df["typo_column"])  # ✗ E001: Column 'typo_column' not in UserSchema
+    print(df["user_id_typo"])  # ✗ E001: Column 'user_id_typo' not in UserSchema
 
 
 if __name__ == "__main__":

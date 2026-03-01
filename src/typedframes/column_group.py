@@ -72,6 +72,38 @@ class ColumnGroup:
 
         return result
 
+    @property
+    def s(self) -> list[str]:
+        """
+        Return all column names in this group as a list of strings.
+
+        Groups containing regex ``ColumnSet`` members raise ``ValueError`` because
+        matched column names are only known at runtime (use ``PandasFrame.from_schema()``
+        for regex resolution).
+
+        Returns:
+            Flat list of column name strings for all non-regex members.
+
+        Example:
+            df[SensorSchema.all_sensors.s]  # pandas — works for non-regex groups
+
+        """
+        result: list[str] = []
+        for member in self.members:
+            if isinstance(member, Column):
+                result.append(member.alias if isinstance(member.alias, str) else member.name)
+            elif isinstance(member, ColumnSet):
+                if member.regex:
+                    msg = (
+                        f"Cannot resolve regex ColumnSet '{member.name}' without consumed_map. "
+                        "Use PandasFrame.from_schema() to resolve regex patterns at runtime."
+                    )
+                    raise ValueError(msg)
+                result.extend(member.members)
+            elif isinstance(member, ColumnGroup):
+                result.extend(member.s)
+        return result
+
     def cols(self, consumed_map: dict[str, list[str]] | None = None) -> list[pl.Expr]:
         """
         Return polars column expressions for all columns in this group.

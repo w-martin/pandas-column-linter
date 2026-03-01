@@ -1,29 +1,36 @@
+"""Pandas example — Annotated type annotation with column validation."""
+
+from typing import Annotated
+
 import pandas as pd
 
 from typedframes import BaseSchema, Column
-from typedframes.pandas import PandasFrame
 
 
 class UserSchema(BaseSchema):
+    """Schema for user data."""
+
     user_id = Column(type=int)
     email = Column(type=str)
 
 
+def load_users() -> Annotated[pd.DataFrame, UserSchema]:
+    """Load user records and assert UserSchema."""
+    return pd.read_csv("users.csv", usecols=["user_id", "email"])
+
+
 def main() -> None:
-    def load_users() -> PandasFrame[UserSchema]:
-        return PandasFrame.from_schema(pd.DataFrame({"user_id": [1], "email": ["a@b.com"]}), UserSchema)
+    """Demonstrate Annotated[pd.DataFrame, Schema] with column validation."""
+    df: Annotated[pd.DataFrame, UserSchema] = pd.DataFrame({"user_id": [1], "email": ["a@b.com"]})
 
-    df = load_users()
-    # 'name' column doesn't exist in UserSchema
-    print(df[UserSchema.email])
-    print(df[UserSchema.user_id])
-    print(df["name"])  # DESIRED: Error: Column 'name' does not exist in UserSchema
+    # String access — validated by the checker
+    print(df["email"])
+    print(df["user_id"])
 
-    # Column name typo
-    print(df["emai"])
-    # DESIRED: Error: Column 'emai' does not exist in UserSchema
-    # (did you mean 'email'?)
+    # These would be caught by the checker:
+    print(df["name"])  # ✗ E001: Column 'name' not in UserSchema
+    print(df["emai"])  # ✗ E001: Column 'emai' not in UserSchema (did you mean 'email'?)
 
-
-if __name__ == "__main__":
-    main()
+    # .s gives a refactor-safe string name from the descriptor
+    print(df[UserSchema.email.s])  # same as df["email"]
+    print(df[UserSchema.user_id.s])  # same as df["user_id"]

@@ -21,27 +21,20 @@ Usage:
     import pandas as pd
     import polars as pl
     from typedframes import BaseSchema, Column, ColumnSet
-    from typedframes.pandas import PandasFrame
-    from typedframes.polars import PolarsFrame
 
     class UserSchema(BaseSchema):
         user_id = Column(type=int)
         email = Column(type=str, alias="user_email")
         scores = ColumnSet(members=r"score_\\d+", type=float, regex=True)
 
-    # Pandas: Use PandasFrame for schema-aware attribute access
-    df: PandasFrame[UserSchema] = PandasFrame.from_schema(
-        pd.read_csv("users.csv"),
-        UserSchema
-    )
-    df.user_id  # Schema column access
+    # Recommended: use Annotated for both pandas and polars
+    df: Annotated[pd.DataFrame, UserSchema] = pd.read_csv("users.csv")
+    df['user_id']  # ✓ Validated by checker
+    df[UserSchema.user_id.s]  # ✓ Refactor-safe string access via descriptor
 
-    # Polars: Use Annotated for full autocomplete (recommended)
     df: Annotated[pl.DataFrame, UserSchema] = pl.read_csv("users.csv")
-    df.filter(UserSchema.user_id.col > 10)  # Schema-based expressions
-
-    # Or use PolarsFrame type alias
-    df: PolarsFrame[UserSchema] = pl.read_csv("users.csv")
+    df.filter(pl.col('user_id') > 10)  # ✓ pl.col() validated by checker
+    df.filter(UserSchema.user_id.col > 10)  # ✓ Refactor-safe polars expression
 """
 
 __version__ = "0.2.0"

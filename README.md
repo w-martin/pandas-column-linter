@@ -9,8 +9,9 @@
 **Static analysis for pandas and polars DataFrames. Catch column errors at lint-time, not runtime.**
 
 ```python
+from typing import Annotated
+import pandas as pd
 from typedframes import BaseSchema, Column
-from typedframes.pandas import PandasFrame
 
 
 class UserData(BaseSchema):
@@ -19,14 +20,14 @@ class UserData(BaseSchema):
     signup_date = Column(type=str)
 
 
-def process(df: PandasFrame[UserData]) -> None:
-  df[UserData.user_id]  # ✓ Schema descriptor — autocomplete, refactor-safe
-  df['user_id']  # ✓ String access — also validated by checker
-  df['username']  # ✗ Error: Column 'username' not in UserData
+df: Annotated[pd.DataFrame, UserData] = pd.read_csv("users.csv")
+df['user_id']    # ✓ Validated by checker
+df['username']   # ✗ E001: Column 'username' not in UserData
 ```
 
-**Why descriptors?** Rename a column in ONE place (`user_id = Column(type=int)`), and all references — `Schema.user_id`,
-`str(Schema.user_id)`, `Schema.user_id.col` — update automatically. No find-and-replace across string literals.
+**Descriptors as a bridge:** define once in `Column(type=int)`, access as `df[UserData.user_id.s]` (pandas string
+access) or `df.select(UserData.revenue.col)` (polars expression). Refactor by changing the descriptor definition —
+all `.s` and `.col` references update automatically. No find-and-replace across string literals.
 
 ---
 
@@ -59,8 +60,8 @@ def process(df: PandasFrame[UserData]) -> None:
 - ✅ **Works without schema annotations** - Column inference from `usecols=`, `dtype=`, and method chains catches errors on unannotated code
 - ✅ **Cross-file awareness** - Add `BaseSchema` and typed return annotations to follow schemas across module boundaries
 - ✅ **Static analysis** - Catch column errors at lint-time with mypy or the standalone checker
-- ✅ **Beautiful runtime UX** - `df[Schema.column_group].mean()` (pandas) instead of ugly column lists
-- ✅ **Works with pandas AND polars** - Same schema API, explicit backend types
+- ✅ **Refactor-safe access** - `df[Schema.column_group.s].mean()` (pandas) or `df.select(Schema.col.col)` (polars) instead of scattered string literals
+- ✅ **Works with pandas AND polars** - Same schema API, native backend types
 - ✅ **Dynamic column matching** - Regex-based ColumnSets for time-series data
 - ✅ **Zero runtime overhead** - No validation, no slowdown
 - ✅ **Type-safe backends** - Type checker knows pandas vs polars methods
@@ -127,49 +128,41 @@ class SalesData(BaseSchema):
 ### Use With Pandas
 
 ```python
-from typedframes.pandas import PandasFrame
+from typing import Annotated
+import pandas as pd
 
-# Load data with schema — one line
-df = PandasFrame.read_csv("sales.csv", SalesData)
+# Annotate your variable — checker validates all column access below
+df: Annotated[pd.DataFrame, SalesData] = pd.read_csv("sales.csv")
 
-# Access columns via schema descriptors
-print(df[SalesData.revenue].sum())
-print(df[SalesData.metrics].mean())  # All metric_* columns
+# String access — validated by the standalone checker
+print(df['revenue'].sum())
+print(df['profit'])  # ✗ E001: Column 'profit' not in SalesData
 
-
-# Type-safe pandas operations
-def analyze(data: PandasFrame[SalesData]) -> float:
-  data[SalesData.revenue]  # ✓ Validated by type checker
-  data['profit']  # ✗ Error at lint-time: 'profit' not in SalesData
-  return data[SalesData.revenue].mean()
+# .s gives a refactor-safe string name from the descriptor
+print(df[SalesData.revenue.s].sum())   # same as df['revenue'].sum()
 
 
-# Standard pandas access still works
-filtered = df[df[SalesData.revenue] > 1000]
-grouped = df.groupby(SalesData.customer_id)[str(SalesData.revenue)].sum()
+# Type-safe function signature
+def analyze(data: Annotated[pd.DataFrame, SalesData]) -> float:
+    data['revenue']  # ✓ Validated by checker
+    data['profit']   # ✗ E001 at lint-time: 'profit' not in SalesData
+    return data[SalesData.revenue.s].mean()
 ```
 
 ### Use With Polars
 
 ```python
-from typedframes.polars import PolarsFrame
+from typing import Annotated
 import polars as pl
 
-# Load data with schema — one line
-df = PolarsFrame.read_csv("sales.csv", SalesData)
+# Annotate your variable — checker validates pl.col() references too
+df: Annotated[pl.DataFrame, SalesData] = pl.read_csv("sales.csv")
 
-# Use schema column references for type-safe expressions
-print(df.select(SalesData.revenue.col).sum())
+# pl.col() references are now validated by the standalone checker
+print(df.filter(pl.col('revenue') > 1000))
+print(df.select(pl.col('profit')))  # ✗ E001: Column 'profit' not in SalesData
 
-
-# Type-safe polars operations
-def analyze_polars(data: PolarsFrame[SalesData]) -> pl.DataFrame:
-  data.select(SalesData.revenue.col)  # ✓ OK
-  data.select(['profit'])  # ✗ Error at lint-time: 'profit' not in SalesData
-  return data.select(SalesData.revenue.col).mean()
-
-
-# Polars methods work as expected
+# .col gives a refactor-safe polars expression from the descriptor
 filtered = df.filter(SalesData.revenue.col > 1000)
 grouped = df.group_by('customer_id').agg(SalesData.revenue.col.sum())
 ```
@@ -200,7 +193,8 @@ The checker also propagates column sets through method chains. Row-preserving op
 unchanged. Structural operations update it:
 
 ```python
-df: PandasFrame[UserData] = pd.read_csv("users.csv")
+from typing import Annotated
+df: Annotated[pd.DataFrame, UserData] = pd.read_csv("users.csv")
 
 # Subscript slice — inferred column set {user_id, email}
 small = df[["user_id", "email"]]
@@ -221,21 +215,30 @@ print(augmented["created_at"])  # ✓ OK
 
 ### Inference Gaps and Warnings
 
-When the checker cannot determine the column set it emits a warning rather than silently skipping validation.
+**W001 — unannotated data ingestion (off by default)**
 
-**W001 — columns unknown at lint time**
+By default, typedframes supports permissive Exploratory Data Analysis (EDA). When a DataFrame is loaded
+via `pd.read_csv()` without `usecols=` or a schema annotation, the checker assumes an *Unknown* state
+and bypasses strict column validation to avoid nagging you during discovery.
 
-Emitted when a DataFrame is loaded without `usecols`/`columns`/`schema=` and without a schema annotation:
+To lock down production CI/CD pipelines, opt in to W001 with `--strict-ingest`:
+
+```shell
+typedframes check src/ --strict-ingest
+```
+
+With strict ingestion enabled, loading a DataFrame without a schema or `usecols=` produces:
 
 ```python
 df = pd.read_csv("users.csv")
 # ⚠ W001: columns unknown at lint time; specify `usecols`/`columns` or
-#   annotate: `df: PandasFrame[MySchema] = pd.read_csv(...)`
+#   annotate: `df: Annotated[pd.DataFrame, MySchema] = pd.read_csv(...)`
 ```
 
 Fix option 1 — annotate with a schema:
 ```python
-df: PandasFrame[UserData] = pd.read_csv("users.csv")
+from typing import Annotated
+df: Annotated[pd.DataFrame, UserData] = pd.read_csv("users.csv")
 ```
 
 Fix option 2 — pass `usecols=`:
@@ -248,25 +251,10 @@ df = pd.read_csv("users.csv", usecols=["user_id", "email"])
 Emitted when `drop(columns=[...])` names a column that isn't in the inferred set:
 
 ```python
-df: PandasFrame[UserData] = pd.read_csv("users.csv")
+from typing import Annotated
+df: Annotated[pd.DataFrame, UserData] = pd.read_csv("users.csv")
 trimmed = df.drop(columns=["nonexistent"])
 # ⚠ W002: Dropped column 'nonexistent' does not exist in UserData
-```
-
-### Configuring Warnings
-
-Disable warnings project-wide in `pyproject.toml`:
-
-```toml
-[tool.typedframes]
-enabled = true
-warnings = false
-```
-
-Or suppress them for a single run:
-
-```shell
-typedframes check src/ --no-warnings
 ```
 
 ### See Also
@@ -361,6 +349,18 @@ mypy src/
 - Integration with existing mypy setup
 - IDE error highlighting
 
+### Supported Operations
+
+The checker tracks schema changes through `rename`, `drop`, `assign`, `select`, `pop`,
+`insert`, `del`, subscript assignment, `merge`, and `concat`. Row-passthrough operations
+like `filter`, `query`, `head`, `sort_values`, and `dropna` are validated without schema
+changes. Operations with runtime-dependent output (`join`, `pivot`, `melt`, `groupby`,
+`apply`, etc.) are left untracked to avoid false positives.
+
+See the full [Method Matrix](https://typedframes.readthedocs.io/en/latest/method-matrix/)
+for the complete list of tracked, passthrough, and untracked operations, plus the error
+code reference.
+
 ---
 
 ## Static Analysis Performance
@@ -369,15 +369,17 @@ Fast feedback reduces development time. The typedframes Rust binary provides nea
 
 **Benchmark results** (10 runs, 3 warmup, caches cleared between runs):
 
-| Tool               | Version | What it does                  | typedframes (11 files) | great_expectations (490 files) |
-|--------------------|---------|-------------------------------|------------------------|--------------------------------|
-| typedframes        | 0.2.0   | DataFrame column checker      | 961µs ±56µs            | 930µs ±89µs                    |
-| ruff               | 0.15.0  | Linter (no type checking)     | 39ms ±12ms             | 360ms ±18ms                    |
-| ty                 | 0.0.16  | Type checker                  | 146ms ±13ms            | 1.65s ±26ms                    |
-| pyrefly            | 0.52.0  | Type checker                  | 152ms ±7ms             | 693ms ±33ms                    |
-| mypy               | 1.19.1  | Type checker (no plugin)      | 9.15s ±218ms           | 12.13s ±400ms                  |
-| mypy + typedframes | 1.19.1  | Type checker + column checker | 9.34s ±331ms           | 13.89s ±491ms                  |
-| pyright            | 1.1.408 | Type checker                  | 2.34s ±335ms           | 8.37s ±253ms                   |
+| Tool               | Version | What it does                  | typedframes (13 files) | great_expectations (490 files)† |
+|--------------------|---------|-------------------------------|------------------------|---------------------------------|
+| typedframes        | 0.2.0   | DataFrame column checker      | 9ms ±2ms               | 930µs ±89µs                     |
+| ruff               | 0.15.4  | Linter (no type checking)     | 64ms ±16ms             | 360ms ±18ms                     |
+| ty                 | 0.0.19  | Type checker                  | 115ms ±22ms            | 1.65s ±26ms                     |
+| pyrefly            | 0.54.0  | Type checker                  | 3.78s ±7.53s           | 693ms ±33ms                     |
+| mypy               | 1.19.1  | Type checker (no plugin)      | 13.85s ±1.08s          | 12.13s ±400ms                   |
+| mypy + typedframes | 1.19.1  | Type checker + column checker | 13.51s ±273ms          | 13.89s ±491ms                   |
+| pyright            | 1.1.408 | Type checker                  | 2.10s ±422ms           | 8.37s ±253ms                    |
+
+*† great_expectations column from previous benchmark run.*
 
 *Run `uv run python benchmarks/benchmark_checkers.py` to reproduce.*
 
@@ -396,12 +398,13 @@ parsing.
 
 ## Type Safety With Multiple Backends
 
-typedframes uses **explicit backend types** to ensure complete type safety:
+typedframes uses **native backend types** to ensure complete type safety:
 
 ```python
+from typing import Annotated
+import pandas as pd
+import polars as pl
 from typedframes import BaseSchema, Column
-from typedframes.pandas import PandasFrame
-from typedframes.polars import PolarsFrame
 
 
 class UserData(BaseSchema):
@@ -410,22 +413,21 @@ class UserData(BaseSchema):
 
 
 # Pandas pipeline - type checker knows pandas methods
-def pandas_analyze(df: PandasFrame[UserData]) -> PandasFrame[UserData]:
-  return df[df[UserData.user_id] > 100]  # ✓ Pandas syntax
+def pandas_analyze(df: Annotated[pd.DataFrame, UserData]) -> Annotated[pd.DataFrame, UserData]:
+    return df[df['user_id'] > 100]  # ✓ Pandas syntax
 
 
 # Polars pipeline - type checker knows polars methods
-def polars_analyze(df: PolarsFrame[UserData]) -> PolarsFrame[UserData]:
-  return df.filter(UserData.user_id.col > 100)  # ✓ Polars syntax
+def polars_analyze(df: Annotated[pl.DataFrame, UserData]) -> Annotated[pl.DataFrame, UserData]:
+    return df.filter(pl.col('user_id') > 100)  # ✓ Polars syntax
 
 
-# Type checker prevents mixing backends
-df_pandas = PandasFrame.read_csv("data.csv", UserData)
-df_polars = PolarsFrame.read_csv("data.csv", UserData)
+# Use native types throughout
+df_pandas: Annotated[pd.DataFrame, UserData] = pd.read_csv("data.csv")
+df_polars: Annotated[pl.DataFrame, UserData] = pl.read_csv("data.csv")
 
 pandas_analyze(df_pandas)  # ✓ OK
 polars_analyze(df_polars)  # ✓ OK
-pandas_analyze(df_polars)  # ✗ Type error: Expected PandasFrame, got PolarsFrame
 ```
 
 ---
@@ -439,9 +441,9 @@ Schema-typed DataFrames preserve their type through common operations:
 **Pandas:**
 
 ```python
-from typedframes import BaseSchema, Column
-from typedframes.pandas import PandasFrame
+from typing import Annotated
 import pandas as pd
+from typedframes import BaseSchema, Column
 
 
 class UserSchema(BaseSchema):
@@ -456,68 +458,64 @@ class OrderSchema(BaseSchema):
 
 
 # Schema preserved through filtering
-def get_active_users(df: PandasFrame[UserSchema]) -> PandasFrame[UserSchema]:
-  return df[df[UserSchema.user_id] > 100]  # ✓ Still PandasFrame[UserSchema]
+def get_active_users(df: Annotated[pd.DataFrame, UserSchema]) -> Annotated[pd.DataFrame, UserSchema]:
+    return df[df['user_id'] > 100]  # ✓ Validated by checker
 
 
 # Schema preserved through merges
-users: PandasFrame[UserSchema] = ...
-orders: PandasFrame[OrderSchema] = ...
-merged = users.merge(orders, on=str(UserSchema.user_id))
+users: Annotated[pd.DataFrame, UserSchema] = pd.read_csv("users.csv")
+orders: Annotated[pd.DataFrame, OrderSchema] = pd.read_csv("orders.csv")
+merged = users.merge(orders, on=UserSchema.user_id.s)
 ```
 
 **Polars:**
 ```python
-from typedframes.polars import PolarsFrame
+from typing import Annotated
 import polars as pl
 
 
 # Schema columns work in filter expressions
-def filter_users(df: PolarsFrame[UserSchema]) -> pl.DataFrame:
-    return df.filter(UserSchema.user_id.col > 100)
+def filter_users(df: Annotated[pl.DataFrame, UserSchema]) -> pl.DataFrame:
+    return df.filter(pl.col('user_id') > 100)
 
 
 # Schema columns work in join expressions
 def join_data(
-    users: PolarsFrame[UserSchema],
-    orders: PolarsFrame[OrderSchema]
+    users: Annotated[pl.DataFrame, UserSchema],
+    orders: Annotated[pl.DataFrame, OrderSchema],
 ) -> pl.DataFrame:
     return users.join(
         orders,
-        left_on=UserSchema.user_id.col,
-        right_on=OrderSchema.user_id.col
+        left_on=UserSchema.user_id.s,
+        right_on=OrderSchema.user_id.s,
     )
 
 
 # Schema columns work in select expressions
-def select_columns(df: PolarsFrame[UserSchema]) -> pl.DataFrame:
-    return df.select([UserSchema.user_id.col, UserSchema.email.col])
+def select_columns(df: Annotated[pl.DataFrame, UserSchema]) -> pl.DataFrame:
+    return df.select([UserSchema.user_id.s, UserSchema.email.s])
 ```
 
 ### Dynamic Column Matching
 
-Perfect for time-series data where column counts change. Regex ColumnSets match actual DataFrame columns at
-`from_schema()` time — the matched columns are stored and used when you access `df[Schema.sensors]`. Static analysis
-validates that the ColumnSet *name* exists in the schema, but cannot verify which columns the regex will match at
-runtime.
+Perfect for time-series data where column counts change. Regex ColumnSets document which columns belong
+to a group and are validated by the static checker. The `.s` property gives you the list of column names
+for explicit (non-regex) ColumnSets; for non-regex groups you can also use `.cols()` for polars expressions.
 
 ```python
+from typing import Annotated
+import pandas as pd
 from typedframes import BaseSchema, Column, ColumnSet, ColumnGroup
-from typedframes.pandas import PandasFrame
 
 
 class SensorReadings(BaseSchema):
     timestamp = Column(type=str)
-    # Matches: sensor_1, sensor_2, ..., sensor_N
-    sensors = ColumnSet(type=float, members=r"sensor_\d+", regex=True)
+    # Explicit sensor columns — refactor-safe list access via .s
+    sensors = ColumnSet(type=float, members=["sensor_1", "sensor_2", "sensor_3"])
 
 
-# Works regardless of how many sensor columns exist
-df = PandasFrame.read_csv("readings_2024_01.csv", SensorReadings)  # 50 sensors
-df[SensorReadings.sensors].mean()  # All sensor columns
-
-df = PandasFrame.read_csv("readings_2024_02.csv", SensorReadings)  # 75 sensors
-df[SensorReadings.sensors].mean()  # All sensor columns (different count, same code)
+df: Annotated[pd.DataFrame, SensorReadings] = pd.read_csv("readings.csv")
+df[SensorReadings.sensors.s].mean()    # ✓ Expands to df[["sensor_1", "sensor_2", "sensor_3"]].mean()
 ```
 
 For logical grouping across multiple ColumnSets:
@@ -525,16 +523,16 @@ For logical grouping across multiple ColumnSets:
 ```python
 class TimeSeriesData(BaseSchema):
     timestamp = Column(type=str)
-    temperature = ColumnSet(type=float, members=r"temp_sensor_\d+", regex=True)
-    pressure = ColumnSet(type=float, members=r"pressure_\d+", regex=True)
+    temperature = ColumnSet(type=float, members=["temp_1", "temp_2", "temp_3"])
+    pressure = ColumnSet(type=float, members=["pressure_1", "pressure_2"])
 
-    # Access all sensor columns together
+    # Group for convenient access to all sensor columns
     sensors = ColumnGroup(members=[temperature, pressure])
 
 
-df = PandasFrame.read_csv("sensors.csv", TimeSeriesData)
-avg_temp = df[TimeSeriesData.temperature].mean()
-all_readings = df[TimeSeriesData.sensors].describe()
+df: Annotated[pd.DataFrame, TimeSeriesData] = pd.read_csv("sensors.csv")
+avg_temp = df[TimeSeriesData.temperature.s].mean()
+all_readings = df[TimeSeriesData.sensors.s].describe()
 ```
 
 ### Schema Composition
@@ -542,8 +540,9 @@ all_readings = df[TimeSeriesData.sensors].describe()
 Compose upward — build bigger schemas from smaller ones via inheritance. Type checkers see all columns natively.
 
 ```python
+from typing import Annotated
+import pandas as pd
 from typedframes import BaseSchema, Column
-from typedframes.pandas import PandasFrame
 
 
 # Start with the smallest useful schema
@@ -566,18 +565,16 @@ class Orders(BaseSchema):
 
 # Combine via multiple inheritance
 class UserOrders(UserPublic, Orders):
-  """Type checkers see all columns from both parents."""
-  ...
+    """Type checkers see all columns from both parents."""
+    ...
 
 
 # Or use the + operator
 UserOrdersDynamic = UserPublic + Orders
 
-users: PandasFrame[UserPublic] = ...
-orders: PandasFrame[Orders] = ...
-merged: PandasFrame[UserOrders] = PandasFrame.from_schema(
-  users.merge(orders, on=str(UserPublic.user_id)), UserOrders
-)
+users: Annotated[pd.DataFrame, UserPublic] = pd.read_csv("users.csv")
+orders: Annotated[pd.DataFrame, Orders] = pd.read_csv("orders.csv")
+merged: Annotated[pd.DataFrame, UserOrders] = users.merge(orders, on=UserPublic.user_id.s)
 ```
 
 Overlapping columns with the same type are allowed (common after merges). Conflicting types raise `SchemaConflictError`.
@@ -658,10 +655,10 @@ typedframes for comprehensive type checking:
 - **[mypy](https://mypy-lang.org/)** (v1.19.1): The original Python type checker. typedframes provides a mypy plugin for
   column checking. See [performance benchmarks](#static-analysis-performance).
 
-- **[ty](https://github.com/astral-sh/ty)** (v0.0.16, Astral): New Rust-based type checker, 10-60x faster than mypy on
+- **[ty](https://github.com/astral-sh/ty)** (v0.0.19, Astral): New Rust-based type checker, 10-60x faster than mypy on
   large codebases. Does not support mypy plugins—use typedframes standalone checker.
 
-- **[pyrefly](https://pyrefly.org/)** (v0.51.1, Meta): Rust-based type checker from Meta, replacement for Pyre. Fast,
+- **[pyrefly](https://pyrefly.org/)** (v0.54.0, Meta): Rust-based type checker from Meta, replacement for Pyre. Fast,
   but no DataFrame column checking.
 
 - **[pyright](https://github.com/microsoft/pyright)** (v1.1.408, Microsoft): Type checker powering Pylance/VSCode. No
@@ -733,8 +730,9 @@ The conversion maps:
 ### Basic CSV Processing
 
 ```python
+from typing import Annotated
+import pandas as pd
 from typedframes import BaseSchema, Column
-from typedframes.pandas import PandasFrame
 
 
 class Orders(BaseSchema):
@@ -744,41 +742,43 @@ class Orders(BaseSchema):
     date = Column(type=str)
 
 
-def calculate_revenue(orders: PandasFrame[Orders]) -> float:
-  return orders[Orders.total].sum()
+def calculate_revenue(orders: Annotated[pd.DataFrame, Orders]) -> float:
+    return orders['total'].sum()
 
 
-df = PandasFrame.read_csv("orders.csv", Orders)
+df: Annotated[pd.DataFrame, Orders] = pd.read_csv("orders.csv")
 revenue = calculate_revenue(df)
 ```
 
 ### Time Series Analysis
 
 ```python
+from typing import Annotated
+import pandas as pd
 from typedframes import BaseSchema, Column, ColumnSet, ColumnGroup
-from typedframes.pandas import PandasFrame
 
 
 class SensorData(BaseSchema):
     timestamp = Column(type=str)
-    temperature = ColumnSet(type=float, members=r"temp_\d+", regex=True)
-    humidity = ColumnSet(type=float, members=r"humidity_\d+", regex=True)
+    temperature = ColumnSet(type=float, members=["temp_1", "temp_2", "temp_3"])
+    humidity = ColumnSet(type=float, members=["humidity_1", "humidity_2"])
 
     all_sensors = ColumnGroup(members=[temperature, humidity])
 
 
-df = PandasFrame.read_csv("sensors.csv", SensorData)
+df: Annotated[pd.DataFrame, SensorData] = pd.read_csv("sensors.csv")
 
-# Clean, type-safe operations
-avg_temp_per_row = df[SensorData.temperature].mean(axis=1)
-all_readings_stats = df[SensorData.all_sensors].describe()
+# Clean, type-safe operations using .s for column name lists
+avg_temp_per_row = df[SensorData.temperature.s].mean(axis=1)
+all_readings_stats = df[SensorData.all_sensors.s].describe()
 ```
 
 ### Multi-Step Pipeline
 
 ```python
+from typing import Annotated
+import pandas as pd
 from typedframes import BaseSchema, Column
-from typedframes.pandas import PandasFrame
 
 
 class RawSales(BaseSchema):
@@ -794,34 +794,33 @@ class AggregatedSales(BaseSchema):
     total_quantity = Column(type=int)
 
 
-def aggregate_daily(df: PandasFrame[RawSales]) -> PandasFrame[AggregatedSales]:
-  result = df.groupby(RawSales.date).agg({
-    str(RawSales.price): 'sum',
-    str(RawSales.quantity): 'sum',
+def aggregate_daily(df: Annotated[pd.DataFrame, RawSales]) -> Annotated[pd.DataFrame, AggregatedSales]:
+    result = df.groupby(RawSales.date.s).agg({
+        RawSales.price.s: 'sum',
+        RawSales.quantity.s: 'sum',
     }).reset_index()
-
-    result.columns = ['date', 'total_revenue', 'total_quantity']
-    return PandasFrame.from_schema(result, AggregatedSales)
+    result.columns = pd.Index(['date', 'total_revenue', 'total_quantity'])
+    return result  # type: ignore[return-value]
 
 
 # Type-safe pipeline
-raw = PandasFrame.read_csv("sales.csv", RawSales)
+raw: Annotated[pd.DataFrame, RawSales] = pd.read_csv("sales.csv")
 aggregated = aggregate_daily(raw)
 
 
 # Type checker validates schema transformations
-def analyze(df: PandasFrame[AggregatedSales]) -> float:
-  df[AggregatedSales.total_revenue]  # ✓ OK
-  df['price']  # ✗ Error: 'price' not in AggregatedSales
-  return df[AggregatedSales.total_revenue].mean()
+def analyze(df: Annotated[pd.DataFrame, AggregatedSales]) -> float:
+    df['total_revenue']  # ✓ OK
+    df['price']          # ✗ Error: 'price' not in AggregatedSales
+    return df[AggregatedSales.total_revenue.s].mean()
 ```
 
 ### Polars Performance Pipeline
 
 ```python
-from typedframes import BaseSchema, Column
-from typedframes.polars import PolarsFrame
+from typing import Annotated
 import polars as pl
+from typedframes import BaseSchema, Column
 
 
 class LargeDataset(BaseSchema):
@@ -830,16 +829,16 @@ class LargeDataset(BaseSchema):
     category = Column(type=str)
 
 
-def efficient_aggregation(df: PolarsFrame[LargeDataset]) -> pl.DataFrame:
+def efficient_aggregation(df: Annotated[pl.DataFrame, LargeDataset]) -> pl.DataFrame:
     return (
-        df.filter(LargeDataset.value.col > 100)
+        df.filter(pl.col('value') > 100)
         .group_by('category')
-        .agg(LargeDataset.value.col.mean())
+        .agg(pl.col('value').mean())
     )
 
 
 # Polars handles large files efficiently
-df = PolarsFrame.read_csv("huge_file.csv", LargeDataset)
+df: Annotated[pl.DataFrame, LargeDataset] = pl.read_csv("huge_file.csv")
 result = efficient_aggregation(df)
 ```
 
@@ -861,28 +860,22 @@ We believe static analysis catches bugs earlier and cheaper than runtime validat
 - ❌ Statistical checks (use Pandera)
 - ❌ Data quality monitoring (use Great Expectations)
 
-**Important:** `PandasFrame.from_schema()` is a *trust assertion*, not a validation step. It tells the type checker "
-this DataFrame conforms to this schema" without verifying the actual data. The linter catches mistakes in your code (
-wrong
-column names, schema mismatches between functions), but it cannot verify that a CSV file contains the expected columns.
-For runtime validation of external data, use [`to_pandera_schema()`](#pandera-integration) to convert your typedframes
-schemas to Pandera schemas.
+**Important:** An `Annotated[pd.DataFrame, Schema]` type annotation is a *trust assertion*, not a validation step.
+It tells the type checker "this DataFrame conforms to this schema" without verifying the actual data. The linter catches
+mistakes in your code (wrong column names, schema mismatches between functions), but it cannot verify that a CSV file
+contains the expected columns. For runtime validation of external data, use
+[`to_pandera_schema()`](#pandera-integration) to convert your typedframes schemas to Pandera schemas.
 
-### Explicit Backend Types
+### Native Backend Types
 
-We use explicit `PandasFrame` and `PolarsFrame` types because:
-- Pandas and polars have different APIs
-- Type safety requires knowing which methods are available
-- Being explicit prevents bugs
+We use native `Annotated[pd.DataFrame, Schema]` and `Annotated[pl.DataFrame, Schema]` types because pandas and
+polars have fundamentally different APIs. By annotating native objects rather than wrapping them in custom classes,
+typedframes lets you use each library's full, native API while still getting schema-level type safety.
 
 **Trade-offs we avoid:**
-- ❌ "Universal DataFrame" abstractions (you lose features)
-- ❌ Implicit backend detection (runtime errors)
+- ❌ Custom wrapper classes (you lose IDE completion for native methods)
+- ❌ "Universal DataFrame" abstractions (you lose library-specific features)
 - ❌ Lowest-common-denominator APIs
-
-The reason to choose polars over pandas is its lazy evaluation, native parallelism, and expressive query syntax.
-Abstraction layers often must expose a lowest-common-denominator API. By using explicit backend types instead,
-typedframes lets you use each library's full, native API while still getting schema-level type safety.
 
 ### Why Abstraction Layers Don't Solve Type Safety
 
@@ -903,13 +896,15 @@ def process(df: nw.DataFrame) -> nw.DataFrame:
 typedframes solves the orthogonal problem of schema safety:
 
 ```python
-from typedframes.polars import PolarsFrame
+from typing import Annotated
+import polars as pl
+from typedframes import BaseSchema, Column
 
 class SalesData(BaseSchema):
     revenue = Column(type=float)
 
-def process(df: PolarsFrame[SalesData]) -> PolarsFrame[SalesData]:
-    return df.filter(df['revnue'] > 100)  # ✗ Error at lint-time: 'revnue' not in SalesData
+def process(df: Annotated[pl.DataFrame, SalesData]) -> pl.DataFrame:
+    return df.filter(pl.col('revnue') > 100)  # ✗ Error at lint-time: 'revnue' not in SalesData
 ```
 
 **Use narwhals when:** You're writing a library that needs to work with multiple DataFrame backends.
@@ -956,7 +951,7 @@ MIT License - see [LICENSE](LICENSE)
 ## FAQ
 
 **Q: Do I need to choose between pandas and polars?**
-A: No. Define your schema once, use it with both. Just use the appropriate type (`PandasFrame` or `PolarsFrame`) in your function signatures.
+A: No. Define your schema once, use it with both. Just use `Annotated[pd.DataFrame, Schema]` or `Annotated[pl.DataFrame, Schema]` in your function signatures.
 
 **Q: Does this replace Pandera?**
 A: No, it complements it. Use typedframes for static analysis, and `to_pandera_schema()` to convert your schemas to
@@ -966,10 +961,9 @@ Pandera for runtime validation. See [Pandera Integration](#pandera-integration).
 A: No. You can use just the mypy plugin, just the standalone checker, or both. They catch the same errors.
 
 **Q: What works without any plugin?**
-A: The `__getitem__` overloads on `PandasFrame` mean that any type checker (mypy, pyright, ty) understands
-`df[Schema.column]` returns `pd.Series` and `df[Schema.column_set]` returns `pd.DataFrame` — no plugin or stubs needed.
-Column *name* validation (catching typos like `df["revnue"]` in string-based access) still requires the standalone
-checker or mypy plugin.
+A: Any type checker (mypy, pyright, ty) understands `Annotated[pd.DataFrame, Schema]` as a plain `pd.DataFrame` —
+no plugin or stubs needed for basic type checking. Column *name* validation (catching typos like `df["revnue"]` in
+string-based access) still requires the standalone checker or mypy plugin.
 
 **Q: What about pyright/pylance users?**
 A: The mypy plugin doesn't work with pyright. Use the standalone checker (`typedframes check`) for column name

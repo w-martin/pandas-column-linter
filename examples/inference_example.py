@@ -5,31 +5,26 @@ chains — without requiring explicit schema annotations. This example shows:
 
   1. Full schema annotation  (best practice — no warnings)
   2. usecols / columns=      (inferred schema — no warnings)
-  3. No columns specified    (W001 warning — columns unknown at lint time)
+  3. No columns specified    (W001 warning — off by default, enable with --strict-ingest)
   4. Method chain inference  (select, drop, rename, assign, filter)
 
-To suppress W001/W002 warnings project-wide, add to pyproject.toml:
+W001 is suppressed by default (EDA-friendly mode). To enable it for production CI:
 
-    [tool.typedframes]
-    warnings = false
+    typedframes check src/ --strict-ingest
 
-Or pass --no-warnings to the CLI for a single run:
+Or suppress all warnings for a single run:
 
     typedframes check src/ --no-warnings
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Annotated
 
 import pandas as pd
 import polars as pl
 
 from typedframes import BaseSchema, Column
-
-if TYPE_CHECKING:
-    from typedframes.pandas import PandasFrame
-    from typedframes.polars import PolarsFrame
 
 
 class UserData(BaseSchema):
@@ -49,7 +44,7 @@ class UserData(BaseSchema):
 
 def load_annotated() -> None:
     """Load with explicit schema annotation — full static checking."""
-    df: PandasFrame[UserData] = pd.read_csv("users.csv")  # type: ignore[assignment]
+    df: Annotated[pd.DataFrame, UserData] = pd.read_csv("users.csv")
     print(df["user_id"])
     print(df["email"])
     # Accessing df["username"] would error: Column 'username' not in UserData
@@ -78,19 +73,18 @@ def load_polars_with_columns() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 3. No columns specified — W001 warning
+# 3. No columns specified — W001 warning (off by default)
 # ---------------------------------------------------------------------------
-# Without usecols/columns or a schema annotation, the checker cannot determine
-# which columns the DataFrame contains. It emits a W001 warning instead of
-# silently skipping column validation.
+# Without usecols/columns or a schema annotation, the checker assumes an
+# Unknown state and stays quiet. Run with --strict-ingest to enable W001.
 #
-# Checker output:
+# Checker output (with --strict-ingest):
 #   warning inference_example.py:N - columns unknown at lint time; specify
-#     `usecols`/`columns` or annotate: `df: PandasFrame[MySchema] = pd.read_csv(...)`
+#     `usecols`/`columns` or annotate: `df: Annotated[pd.DataFrame, MySchema] = pd.read_csv(...)`
 
 
 def load_without_columns() -> None:
-    """Load without column info — generates W001 warning."""
+    """Load without column info — generates W001 with --strict-ingest."""
     df = pd.read_csv("users.csv")
     df_pl = pl.read_csv("users.csv")
     print(df, df_pl)
@@ -106,7 +100,7 @@ def load_without_columns() -> None:
 
 def method_chain_inference() -> None:
     """Demonstrate column set propagation through pandas method chains."""
-    df: PandasFrame[UserData] = pd.read_csv("users.csv")  # type: ignore[assignment]
+    df: Annotated[pd.DataFrame, UserData] = pd.read_csv("users.csv")
 
     # Subscript slice — inferred column set {user_id, email}
     small = df[["user_id", "email"]]
@@ -137,7 +131,7 @@ def method_chain_inference() -> None:
 
 def polars_select_inference() -> None:
     """Demonstrate select() inference for polars."""
-    df: PolarsFrame[UserData] = pl.read_csv("users.csv")  # type: ignore[assignment]
+    df: Annotated[pl.DataFrame, UserData] = pl.read_csv("users.csv")
 
     # select() with a literal list — inferred column set {user_id, email}
     small = df.select(["user_id", "email"])
@@ -153,7 +147,7 @@ def polars_select_inference() -> None:
 
 def inference_gaps() -> None:
     """Show W002: dropping a column not present in the inferred set."""
-    df: PandasFrame[UserData] = pd.read_csv("users.csv")  # type: ignore[assignment]
+    df: Annotated[pd.DataFrame, UserData] = pd.read_csv("users.csv")
 
     # Dropping a column that the checker knows doesn't exist — W002 warning:
     # W002: Dropped column 'nonexistent' does not exist in UserData

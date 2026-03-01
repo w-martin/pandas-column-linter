@@ -49,6 +49,27 @@ class ColumnSet:
         """Set the name attribute from the class attribute name."""
         self.name = name
 
+    @property
+    def s(self) -> list[str]:
+        """
+        Return the column names as a list of strings for native pandas subscript access.
+
+        For non-regex ColumnSets, returns the explicit member names.  For regex
+        ColumnSets, raises ``ValueError`` because the matched column names are only
+        known at runtime (use ``PandasFrame.from_schema()`` for regex resolution).
+
+        Example:
+            df[SensorSchema.temperatures.s]  # pandas — works for non-regex ColumnSets
+
+        """
+        if self.regex:
+            msg = (
+                "Cannot get column names for regex ColumnSet without matched columns. "
+                "Use PandasFrame.from_schema() to resolve regex patterns at runtime."
+            )
+            raise ValueError(msg)
+        return list(self.members)
+
     def cols(self, matched_columns: list[str] | None = None) -> list[pl.Expr]:
         """
         Return polars column expressions for all columns in this set.

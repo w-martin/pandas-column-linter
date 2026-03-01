@@ -107,3 +107,27 @@ class TestColumn(unittest.TestCase):
 
         # assert
         self.assertEqual(result, "email_address")
+
+    def test_should_return_column_name_via_s_property(self) -> None:
+        """Test that .s returns the effective column name as a string."""
+        # arrange
+        sut = Column(type=int)
+        sut.__set_name__(None, "user_id")
+
+        # act
+        result = sut.s
+
+        # assert
+        self.assertEqual(result, "user_id")
+
+    def test_should_return_alias_via_s_property_when_set(self) -> None:
+        """Test that .s respects alias, matching column_name behavior."""
+        # arrange
+        sut = Column(type=str, alias="email_address")
+        sut.__set_name__(None, "email")
+
+        # act
+        result = sut.s
+
+        # assert
+        self.assertEqual(result, "email_address")

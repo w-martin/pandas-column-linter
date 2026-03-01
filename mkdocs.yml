@@ -30,6 +30,8 @@ plugins:
 
 nav:
   - Home: index.md
+  - Usage Guide: usage.md
+  - Method Matrix: method-matrix.md
   - API Reference:
     - Overview: api/index.md
     - Core: api/core.md

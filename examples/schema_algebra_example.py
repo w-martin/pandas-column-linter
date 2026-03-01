@@ -1,9 +1,10 @@
 """Schema composition example — compose upward, never strip down."""
 
+from typing import Annotated
+
 import pandas as pd
 
 from typedframes import BaseSchema, Column
-from typedframes.pandas import PandasFrame
 
 # -- Compose upward: base schemas first, extend via inheritance ---------------
 
@@ -38,36 +39,28 @@ class UserOrders(UserPublic, Orders):
     """Combined schema for merged user/order data."""
 
 
-# -- Wrap raw DataFrames as PandasFrames -------------------------------------
+# -- Annotate native DataFrames -----------------------------------------------
 
-users: PandasFrame[UserPublic] = PandasFrame.from_schema(
-    pd.DataFrame(
-        {
-            "user_id": [1, 2],
-            "email": ["a@b.com", "c@d.com"],
-            "name": ["Alice", "Bob"],
-        }
-    ),
-    UserPublic,
+users: Annotated[pd.DataFrame, UserPublic] = pd.DataFrame(
+    {
+        "user_id": [1, 2],
+        "email": ["a@b.com", "c@d.com"],
+        "name": ["Alice", "Bob"],
+    }
 )
 
-orders: PandasFrame[Orders] = PandasFrame.from_schema(
-    pd.DataFrame(
-        {
-            "order_id": [101, 102],
-            "user_id": [1, 2],
-            "total": [29.99, 49.99],
-        }
-    ),
-    Orders,
+orders: Annotated[pd.DataFrame, Orders] = pd.DataFrame(
+    {
+        "order_id": [101, 102],
+        "user_id": [1, 2],
+        "total": [29.99, 49.99],
+    }
 )
 
 # -- Use the combined schema for merge results --------------------------------
+# .s gives the refactor-safe string column name from the descriptor.
 
-merged: PandasFrame[UserOrders] = PandasFrame.from_schema(
-    users.merge(orders, on=str(UserPublic.user_id)),
-    UserOrders,
-)
+merged: Annotated[pd.DataFrame, UserOrders] = users.merge(orders, on=UserPublic.user_id.s)
 print("UserOrders columns:", list(UserOrders.columns().keys()))
 print(merged)
 print()

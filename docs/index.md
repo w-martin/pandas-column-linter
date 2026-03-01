@@ -2,6 +2,29 @@
 
 Static analysis for pandas and polars DataFrames. Catch column errors at lint-time, not runtime.
 
+```python
+from typing import Annotated
+import pandas as pd
+from typedframes import BaseSchema, Column
+
+
+class UserData(BaseSchema):
+    user_id = Column(type=int)
+    email = Column(type=str)
+    signup_date = Column(type=str)
+
+
+df: Annotated[pd.DataFrame, UserData] = pd.read_csv("users.csv")
+df['user_id']    # ✓ Validated by checker
+df['username']   # ✗ E001: Column 'username' not in UserData
+```
+
+```shell
+typedframes check src/
+# ✓ Checked 12 files in 0.0s
+# ✗ src/pipeline.py:3 - Column 'username' not in UserData
+```
+
 ## How it works
 
 The standalone checker (written in Rust) runs on any existing codebase. It infers column sets from
@@ -17,12 +40,6 @@ print(orders["amount"])   # ✓ OK
 print(orders["revenue"])  # ✗ E001 — 'revenue' not in inferred set
 ```
 
-```shell
-typedframes check src/
-# ✓ Checked 12 files in 0.0s
-# ✗ src/pipeline.py:7 - Column 'revenue' not in inferred set {order_id, amount, status}
-```
-
 ## Progressive adoption
 
 **Day one** — run `typedframes check src/` on your existing code. Any `usecols=` / `columns=` calls
@@ -33,8 +50,9 @@ indexes return type annotations and validates call sites in other files, catchin
 whole project.
 
 ```python
+from typing import Annotated
+import pandas as pd
 from typedframes import BaseSchema, Column
-from typedframes.pandas import PandasFrame
 
 
 class OrderSchema(BaseSchema):
@@ -43,9 +61,8 @@ class OrderSchema(BaseSchema):
     status = Column(type=str)
 
 
-def load_orders(path: str) -> PandasFrame[OrderSchema]:
-    raw = pd.read_csv(path, usecols=["order_id", "amount", "status"])
-    return PandasFrame.from_schema(raw, OrderSchema)
+def load_orders(path: str) -> Annotated[pd.DataFrame, OrderSchema]:
+    return pd.read_csv(path, usecols=["order_id", "amount", "status"])
 ```
 
 Now every file that calls `load_orders()` has its column access validated against `OrderSchema` —

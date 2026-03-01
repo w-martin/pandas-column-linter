@@ -65,6 +65,21 @@ class Column:
 
         return pl.col(self.column_name)
 
+    @property
+    def s(self) -> str:
+        """
+        Return the column name as a string for native pandas subscript access.
+
+        Provides refactor-safe column name access without requiring ``PandasFrame``.
+        Parallel to ``.col`` (polars expression) for pandas string access.
+
+        Example:
+            df[UserSchema.user_id.s]          # pandas — works with plain pd.DataFrame
+            df.groupby(UserSchema.region.s)   # pandas groupby
+
+        """
+        return self.column_name
+
     def __str__(self) -> str:
         """Return the column name as a string for use in subscript access."""
         return self.column_name

@@ -19,8 +19,8 @@ typedframes = "typedframes.cli:main"
 
 [project.optional-dependencies]
 pandas = ["pandas>=2.3.3"]
-pandera = ["pandera>=0.22.0"]
-polars = ["polars>=1.37.1"]
+pandera = ["pandera>=0.29.0"]
+polars = ["polars>=1.38.1"]
 mypy = ["mypy"]
 
 [tool.maturin]
@@ -89,7 +89,7 @@ docs = [
     "mkdocstrings-python>=1.10",
 ]
 dev = [
-    "pandas>=3.0.0",
+    "pandas>=3.0.1",
     "pandera>=0.29.0",
     "polars>=1.38.1",
     "bandit>=1.9.3",
@@ -99,13 +99,13 @@ dev = [
     "licensecheck>=2025.1.0",
     "maturin>=1.11.5",
     "pre-commit>=4.5.1",
-    "pyrefly>=0.52.0",
+    "pyrefly>=0.54.0",
     "pyright>=1.1.408",
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",
     "pytest-xdist>=3.8.0",
     "ruff>=0.15.0",
-    "ty>=0.0.16",
+    "ty>=0.0.19",
     "openpyxl>=3.1.5",
     "pyarrow>=23.0.0",
     "xlsxwriter>=3.2.9",

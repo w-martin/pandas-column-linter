@@ -73,6 +73,28 @@ class TestColumnSet(unittest.TestCase):
 
         self.assertIn("regex", str(context.exception))
 
+    def test_should_return_member_names_via_s_property(self) -> None:
+        """Test that .s returns the explicit member name list for non-regex ColumnSets."""
+        # arrange
+        sut = ColumnSet(members=["temp_1", "temp_2"], type=float)
+
+        # act
+        result = sut.s
+
+        # assert
+        self.assertEqual(result, ["temp_1", "temp_2"])
+
+    def test_should_raise_via_s_property_for_regex_column_set(self) -> None:
+        """Test that .s raises ValueError for regex ColumnSets."""
+        # arrange
+        sut = ColumnSet(members=r"temp_\d+", type=float, regex=True)
+
+        # act/assert
+        with self.assertRaises(ValueError) as context:
+            _ = sut.s
+
+        self.assertIn("regex", str(context.exception))
+
     def test_should_normalize_single_string_member_to_list(self) -> None:
         """Test that a single string member is normalized to a list by __post_init__."""
         # arrange/act

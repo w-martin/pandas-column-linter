@@ -29,16 +29,16 @@ def summarise_orders(path: str) -> None:
     orders = load_orders(path)
 
     # The checker knows orders has {order_id, customer_id, amount, status}
-    # because load_orders is annotated -> PandasFrame[OrderSchema].
+    # because load_orders is annotated -> Annotated[pd.DataFrame, OrderSchema].
 
     print(orders["order_id"])  # ✓ OK — in OrderSchema
     print(orders["amount"])  # ✓ OK — in OrderSchema
     # Accessing orders["revenue"] would error: 'revenue' not in OrderSchema
     # Accessing orders["date"] would error: 'date' not in OrderSchema
 
-    # Schema descriptor access — refactor-safe, IDE-autocomplete friendly
-    print(orders[OrderSchema.amount])  # ✓ OK — descriptor resolves to "amount"
-    print(orders[OrderSchema.status])  # ✓ OK — descriptor resolves to "status"
+    # Descriptor .s access — refactor-safe, IDE-autocomplete friendly
+    print(orders[OrderSchema.amount.s])  # ✓ OK — descriptor resolves to "amount"
+    print(orders[OrderSchema.status.s])  # ✓ OK — descriptor resolves to "status"
 
     # Method chains on typed frames propagate the schema
     high_value = orders[orders["amount"] > LARGE_ORDER_AMOUNT]  # row filter — schema unchanged
@@ -84,8 +84,7 @@ def wrong_column_cross_file(path: str) -> None:
     """Accesses a column absent from OrderSchema — caught via the project index.
 
     ``load_orders`` is in ``loaders.py``, ``OrderSchema`` is in ``schemas.py``.
-    The checker traces all three files and reports E001.  mypy and ty accept the
-    call because ``PandasFrame.__getitem__`` takes ``str`` and returns ``Any``.
+    The checker traces all three files and reports E001.
     """
     orders = load_orders(path)
     print(orders["revenue"])  # ✗ E001 — 'revenue' not in OrderSchema

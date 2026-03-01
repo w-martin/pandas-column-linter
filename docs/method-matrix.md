@@ -1,0 +1,98 @@
+# AST Method Matrix
+
+This page documents how the `typedframes` static checker handles each DataFrame operation.
+Operations fall into three categories: **schema-modifying** (the checker updates its
+internal column model), **row-passthrough** (the checker assumes the schema is unchanged),
+and **untracked** (the variable is dropped from tracking to avoid false positives).
+
+---
+
+## Schema-Modifying Operations
+
+The checker updates its column model when it sees these operations, so subsequent accesses
+are validated against the new schema.
+
+| Operation | Effect on schema | Example |
+|-----------|-----------------|---------|
+| `df["col"] = val` | Adds `"col"` to the schema | `df["score"] = df["value"] * 2` |
+| `del df["col"]` | Removes `"col"` from the schema | `del df["temp"]` |
+| `df.drop(columns=[…])` | Removes listed columns | `df.drop(columns=["a", "b"])` |
+| `df.drop([…])` | Removes listed columns (positional) | `df.drop(["a", "b"])` |
+| `df.assign(col=…)` | Adds new column(s) to the schema | `df.assign(full_name=…)` |
+| `df.rename(columns={…})` | Renames columns in the schema | `df.rename(columns={"a": "b"})` |
+| `df.select([…])` | Narrows schema to selected columns | `df.select(["id", "name"])` |
+| `df.select(pl.col("…"))` | Narrows schema to the named column | `df.select(pl.col("id"))` |
+| `df.pop("col")` | Removes `"col"` from the schema | `df.pop("score")` |
+| `df.insert(pos, "col", val)` | Adds `"col"` to the schema | `df.insert(0, "rank", …)` |
+| `df[["c1", "c2"]]` | Narrows schema to selected columns | `subset = df[["id", "name"]]` |
+| `pd.merge(left, right, …)` | Merges both schemas | `merged = pd.merge(a, b, on="id")` |
+| `pd.concat([df1, df2], …)` | Unions both schemas | `combined = pd.concat([a, b])` |
+
+---
+
+## Row-Passthrough Operations
+
+The checker leaves the schema unchanged for these operations — the output variable inherits
+the same column model as the input.
+
+| Operation | Notes |
+|-----------|-------|
+| `df.filter(…)` | Row filter; columns unchanged |
+| `df.query(…)` | pandas query string; columns unchanged |
+| `df.head(n)` | First *n* rows; columns unchanged |
+| `df.tail(n)` | Last *n* rows; columns unchanged |
+| `df.sample(…)` | Random sample; columns unchanged |
+| `df.sort_values(…)` | Row sort; columns unchanged |
+| `df.sort(…)` | polars row sort; columns unchanged |
+| `df.reset_index(…)` | Index reset; columns unchanged |
+| `df.nlargest(n, col)` | Top *n* rows; columns unchanged |
+| `df.nsmallest(n, col)` | Bottom *n* rows; columns unchanged |
+| `df.fillna(…)` | Fill NaN values; columns unchanged |
+| `df.dropna(…)` | Drop NaN rows; columns unchanged |
+| `df.ffill()` / `df.bfill()` | Forward/back fill; columns unchanged |
+
+---
+
+## Untracked Operations
+
+For these operations the result variable is **not tracked** — the checker won't report
+false positives on it, but it also won't validate column references against it.
+
+These operations require runtime information (joined keys, pivot categories, melt id-vars,
+explosion depth, etc.) that is not available to a static AST pass. Tracking them correctly
+would require evaluating expressions at compile time, which is out of scope for a static
+checker.
+
+| Operation | Why untracked |
+|-----------|--------------|
+| `df.join(other, …)` | Output schema depends on join keys and `how=` parameter |
+| `df.merge(other, …)` | (pandas instance method) Same as join |
+| `df.pivot(…)` | Output columns are derived from cell values at runtime |
+| `df.pivot_table(…)` | Same as pivot |
+| `df.melt(…)` | Converts columns to rows; output schema varies by `id_vars` |
+| `df.explode(col)` | Schema depends on list column depth |
+| `pd.get_dummies(df, …)` | Columns come from categorical values, unknown at lint time |
+| `df.stack(…)` | Pivots column level to row index |
+| `df.unstack(…)` | Pivots row index to column level |
+| `df.apply(fn, …)` | Output depends on the return type of `fn` |
+| `df.map(fn, …)` | Output depends on `fn` |
+| `df.transform(fn, …)` | Output depends on `fn` |
+| `df.groupby(…).agg(…)` | Output columns are determined by aggregation spec |
+| `df.with_columns(…)` | polars column addition/mutation; schema not narrowed statically |
+
+---
+
+## Error Code Reference
+
+| Code | Severity | Message | Default |
+|------|----------|---------|---------|
+| `E001` | Error | Column `'<name>'` not found in `<Schema>`. Did you mean `'<suggestion>'`? | Always reported |
+| `E002` | Error | Renamed-from column `'<name>'` not found in `<Schema>` | Always reported |
+| `W001` | Warning | Columns unknown at lint time — annotate with a schema to enable column checking | Off by default |
+| `W002` | Warning | (reserved for future use) | — |
+
+**W001** is suppressed unless `--strict-ingest` is passed to the CLI. This keeps the
+checker quiet on exploratory scripts that load data without a schema annotation.
+
+**E001** reports the closest column name as a typo suggestion when the edit distance is
+small (≤ 2 characters), which helps catch common capitalization and spelling mistakes.

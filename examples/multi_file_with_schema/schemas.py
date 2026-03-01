@@ -2,13 +2,14 @@
 
 ``BaseSchema`` classes give the checker a named, stable column set that travels
 with the DataFrame as it moves across module boundaries.  Functions that return
-``PandasFrame[OrderSchema]`` carry the full column set into every call site —
-no ``usecols=`` required at the load point and no inference gap at the consumer.
+``Annotated[pd.DataFrame, OrderSchema]`` carry the full column set into every
+call site — no ``usecols=`` required at the load point and no inference gap at
+the consumer.
 
 The descriptors (``OrderSchema.amount``, ``OrderSchema.customer_id``, …) also
-give you IDE autocomplete and rename-safe column references in application code,
-but they are orthogonal to the checker — the checker validates string literals
-like ``df["amount"]`` equally well.
+give you IDE autocomplete and rename-safe column references via ``.s`` (string)
+and ``.col`` (polars expression), but they are orthogonal to the checker — the
+checker validates string literals like ``df["amount"]`` equally well.
 """
 
 from __future__ import annotations
